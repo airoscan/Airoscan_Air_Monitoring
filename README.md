@@ -23,7 +23,7 @@ A real-time dashboard for monitoring PM2.5 air quality data from stations in Kur
 
 1. Clone the repository
    ```
-   git clone https://github.com/yourusername/Air_quality_Monitoring.git
+   git clone https://github.com/BlindJamil/Air_quality_Monitoring.git
    cd Air_quality_Monitoring
    ```
 
