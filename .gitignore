@@ -25,4 +25,8 @@ yarn-error.log*
 
 # Build files
 /dist/
-/build/ 
+/build/
+
+# Accidental files
+"how origin  grep HEAD branch"
+"ter main" 
