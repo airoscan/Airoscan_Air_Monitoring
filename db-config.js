@@ -2,12 +2,14 @@
 const SUPABASE_URL = 'https://gyrcemnqauyoxkjwprjg.supabase.co';
 
 // Get the API key from localStorage if available
-// This allows the key to be set once during initialization and not be hardcoded
 let SUPABASE_KEY = '';
 try {
-    SUPABASE_KEY = localStorage.getItem('supabase_api_key') || '';
+    SUPABASE_KEY = localStorage.getItem('supabase_api_key');
+    if (!SUPABASE_KEY) {
+        console.warn('No Supabase API key found in localStorage');
+    }
 } catch (e) {
-    console.warn('Unable to access localStorage', e);
+    console.error('Unable to access localStorage:', e);
 }
 
 // Database connection string for reference:
@@ -25,38 +27,71 @@ try {
   );
 */
 
-// Export configuration
+// Database configuration object
 const dbConfig = {
     supabaseUrl: SUPABASE_URL,
     supabaseKey: SUPABASE_KEY,
-    airQualityTableName: 'sensor_data',
+    airQualityTable: 'sensor_data',
+    client: null,
     
-    // Method to securely set the API key
+    // Method to securely set the API key and initialize client
     setApiKey: function(apiKey) {
+        if (!apiKey) {
+            console.error('Invalid API key provided');
+            return false;
+        }
+        
         try {
+            // Save to localStorage
             localStorage.setItem('supabase_api_key', apiKey);
             this.supabaseKey = apiKey;
-            console.log('API key saved to local storage');
-            return true;
+            console.log('API key saved successfully');
+            
+            // Initialize client if Supabase is available
+            if (typeof supabase !== 'undefined') {
+                this.client = supabase.createClient(this.supabaseUrl, apiKey);
+                console.log('Supabase client initialized with new API key');
+                return true;
+            } else {
+                console.error('Supabase library not loaded');
+                return false;
+            }
         } catch (e) {
-            console.error('Failed to save API key', e);
+            console.error('Failed to save API key:', e);
+            return false;
+        }
+    },
+    
+    // Method to initialize the client
+    initClient: function() {
+        if (!this.supabaseKey) {
+            console.error('No API key available. Please set the API key first.');
+            return false;
+        }
+        
+        try {
+            if (typeof supabase === 'undefined') {
+                throw new Error('Supabase library not loaded');
+            }
+            
+            this.client = supabase.createClient(this.supabaseUrl, this.supabaseKey);
+            console.log('Supabase client initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize Supabase client:', error);
             return false;
         }
     }
 };
 
-// Initialize Supabase client if available
-try {
-    if (typeof supabase !== 'undefined' && dbConfig.supabaseKey) {
-        console.log('Initializing Supabase client from config file');
-        const client = supabase.createClient(dbConfig.supabaseUrl, dbConfig.supabaseKey);
-        dbConfig.client = client;
-    }
-} catch (error) {
-    console.error('Error initializing Supabase client:', error);
-}
-
 // Make accessible globally if in a browser environment
 if (typeof window !== 'undefined') {
     window.dbConfig = dbConfig;
+    
+    // Try to initialize client if API key is available
+    if (dbConfig.supabaseKey) {
+        dbConfig.initClient();
+    } else {
+        console.warn('Please set your Supabase API key using dbConfig.setApiKey()');
+    }
 } 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Initialize Air Quality Database</title>
+    <title>Air Quality Database Connection</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Supabase Client -->
@@ -82,7 +82,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-3xl font-bold mb-6">Initialize Air Quality Database</h1>
+        <h1 class="text-3xl font-bold mb-6">Air Quality Database Connection</h1>
         
         <!-- Password Protection Form -->
         <div id="password-protection" class="card">
@@ -90,7 +90,7 @@
             <p class="mb-4">This page contains sensitive configuration options and should only be accessed by authorized personnel.</p>
             <div class="input-group">
                 <label class="label" for="access_password">Password:</label>
-                <input class="input" type="password" id="access_password" placeholder="Enter the initialization password">
+                <input class="input" type="password" id="access_password" placeholder="Enter the access password">
             </div>
             <button id="unlock-btn" class="btn">Unlock Configuration</button>
         </div>
@@ -98,7 +98,7 @@
         <!-- Main Configuration (Hidden until password verified) -->
         <div id="main-content" style="display: none;">
             <div class="card">
-                <h2 class="text-xl font-semibold mb-4">Database Configuration</h2>
+                <h2 class="text-xl font-semibold mb-4">Database Connection Settings</h2>
                 <form id="config-form">
                     <div class="input-group">
                         <label class="label" for="supabase_url">Supabase URL:</label>
@@ -110,17 +110,17 @@
                         <input class="input" type="password" id="supabase_key" name="supabase_key" placeholder="Enter your Supabase API key">
                         <p class="text-sm text-gray-500 mt-1">
                             You can find this in your Supabase dashboard under Project Settings > API > Project API keys.
-                            Use the "anon" key for this setup.
+                            Use the "anon" key for read-only access.
                         </p>
                     </div>
                     
                     <div class="input-group">
                         <label class="label" for="table_name">Table Name:</label>
-                        <input class="input" type="text" id="table_name" name="table_name" value="air_quality_readings">
+                        <input class="input" type="text" id="table_name" name="table_name" value="sensor_data" readonly>
                     </div>
                     
                     <div class="mt-6">
-                        <button type="submit" id="init-btn" class="btn">Initialize Database</button>
+                        <button type="submit" id="init-btn" class="btn">Connect to Database</button>
                         <button type="button" id="test-btn" class="btn ml-4" style="background-color: #3B82F6;">Test Connection</button>
                     </div>
                 </form>
@@ -138,13 +138,13 @@
                 <ol class="list-decimal pl-5 space-y-2">
                     <li>Enter your Supabase API key (anon public key) in the form above.</li>
                     <li>Click "Test Connection" to verify your connection to the database.</li>
-                    <li>Click "Initialize Database" to create the required table and sample data.</li>
-                    <li>Once initialization is complete, go to <a href="index.html" class="text-blue-600 underline">the dashboard</a> to view the data.</li>
+                    <li>Click "Connect to Database" to establish a read-only connection.</li>
+                    <li>Once connected, go to <a href="index.html" class="text-blue-600 underline">the dashboard</a> to view the data.</li>
                 </ol>
                 
                 <div class="mt-4 bg-blue-50 p-4 rounded">
                     <p class="text-sm text-blue-800">
-                        <strong>Note:</strong> Make sure to update your db-config.js file with the correct API key after testing.
+                        <strong>Note:</strong> This is a read-only connection. No data will be modified or inserted.
                     </p>
                 </div>
             </div>
@@ -163,7 +163,7 @@
         const testBtn = document.getElementById('test-btn');
         const logOutput = document.getElementById('log-output');
         
-        // Set the initialization password - CHANGE THIS TO YOUR OWN PASSWORD
+        // Set the initialization password
         const INIT_PASSWORD = "uni_2025_final";
         
         // Function to check the password
@@ -196,36 +196,7 @@
             logOutput.scrollTop = logOutput.scrollHeight;
         }
         
-        // Test database connection
-        testBtn.addEventListener('click', async function() {
-            const supabaseUrl = document.getElementById('supabase_url').value;
-            const supabaseKey = document.getElementById('supabase_key').value;
-            
-            if (!supabaseKey) {
-                log('Error: Please enter your Supabase API key');
-                return;
-            }
-            
-            log('Testing connection to Supabase...');
-            
-            try {
-                const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-                
-                // Try a simple query to check connection
-                const { data, error } = await supabase.from('_deprecated_test').select('*').limit(1).maybeSingle();
-                
-                if (error && error.code !== '42P01') { // 42P01 is "relation does not exist" which is fine
-                    log(`Error: ${error.message}`);
-                    return;
-                }
-                
-                log('Connection successful! Your credentials work.');
-            } catch (error) {
-                log(`Error: ${error.message}`);
-            }
-        });
-        
-        // Initialize database
+        // Connect to database (read-only)
         configForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -238,161 +209,102 @@
                 return;
             }
             
-            log('Beginning database initialization...');
+            log('Establishing read-only connection to database...');
             initBtn.disabled = true;
             testBtn.disabled = true;
             
             try {
                 // Create a Supabase client
                 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-                log('Supabase client initialized');
                 
-                // 1. First try to create the SQL function for table creation
-                log('Setting up SQL helper function...');
-                const { error: fnError } = await supabase.rpc('exec_sql', {
-                    sql_statement: `
-                        CREATE OR REPLACE FUNCTION create_air_quality_table(table_name text) RETURNS void AS $$
-                        BEGIN
-                            EXECUTE format('
-                                CREATE TABLE IF NOT EXISTS %I (
-                                    id SERIAL PRIMARY KEY,
-                                    pm25 NUMERIC NOT NULL,
-                                    "Location" VARCHAR(255) NOT NULL,
-                                    timestamp TIMESTAMPTZ DEFAULT NOW(),
-                                    notes TEXT
-                                )', table_name);
-                        END;
-                        $$ LANGUAGE plpgsql SECURITY DEFINER;
-                    `
-                });
+                // Create a read-only wrapper around the Supabase client
+                const readOnlyClient = {
+                    from: (table) => {
+                        const originalFrom = supabase.from(table);
+                        return {
+                            select: originalFrom.select.bind(originalFrom),
+                            // Block write operations by throwing errors
+                            insert: () => Promise.reject(new Error('Insert operations are not allowed in dashboard mode')),
+                            update: () => Promise.reject(new Error('Update operations are not allowed in dashboard mode')),
+                            delete: () => Promise.reject(new Error('Delete operations are not allowed in dashboard mode')),
+                            upsert: () => Promise.reject(new Error('Upsert operations are not allowed in dashboard mode'))
+                        };
+                    },
+                    // Only expose read methods
+                    auth: supabase.auth,
+                    rpc: (fn, ...args) => Promise.reject(new Error('RPC calls are not allowed in dashboard mode'))
+                };
                 
-                if (fnError) {
-                    // If exec_sql function doesn't exist, try direct SQL
-                    log('SQL helper not available. Trying direct SQL execution...');
-                    
-                    // Try direct SQL execution
-                    const { error: directError } = await supabase.rpc('exec_sql', {
-                        sql_query: `
-                            CREATE TABLE IF NOT EXISTS ${tableName} (
-                                id SERIAL PRIMARY KEY,
-                                pm25 NUMERIC NOT NULL,
-                                "Location" VARCHAR(255) NOT NULL,
-                                timestamp TIMESTAMPTZ DEFAULT NOW(),
-                                notes TEXT
-                            )
-                        `
-                    });
-                    
-                    if (directError) {
-                        log(`Direct SQL failed: ${directError.message}`);
-                        log('Table creation may not be allowed with your permissions. You may need to create the table manually in the Supabase dashboard.');
+                // Replace the original client with our read-only wrapper
+                window.supabase = readOnlyClient;
+                
+                log('Supabase client initialized (dashboard mode - read-only)');
+                
+                // Test read-only enforcement
+                try {
+                    await readOnlyClient.from('sensor_data').insert([{ pm25: 0, Location: 'test' }]);
+                    throw new Error('Write operations are not properly blocked');
+                } catch (e) {
+                    if (e.message.includes('not allowed in dashboard mode')) {
+                        log('Verified: Write operations are blocked');
                     } else {
-                        log('Table created successfully using direct SQL');
-                    }
-                } else {
-                    log('SQL helper function created successfully');
-                    
-                    // Create table using the function
-                    const { error: createError } = await supabase.rpc('create_air_quality_table', {
-                        table_name: tableName
-                    });
-                    
-                    if (createError) {
-                        log(`Error creating table: ${createError.message}`);
-                    } else {
-                        log(`Table ${tableName} created or already exists`);
+                        throw e;
                     }
                 }
                 
-                // 2. Check if we already have sample data
-                log('Checking if sample data already exists...');
-                const { data: countData, error: countError } = await supabase
+                // Check if we can access the table and read recent data
+                log('Verifying read access and fetching recent data...');
+                const { data: recentData, error: dataError } = await readOnlyClient
+                    .from(tableName)
+                    .select('*')  // Select all columns to see what we have
+                    .order('timestamp', { ascending: false })
+                    .limit(5);
+                    
+                if (dataError) {
+                    throw new Error(`Cannot access table: ${dataError.message}`);
+                }
+                
+                log('Successfully verified read access to database');
+                
+                if (recentData && recentData.length > 0) {
+                    log('\nMost recent readings:');
+                    log('Raw data from database:');
+                    recentData.forEach(reading => {
+                        log(JSON.stringify(reading, null, 2));  // Show all fields
+                    });
+                } else {
+                    log('\nNo readings found in the database. Checking table structure...');
+                    
+                    // Get table information
+                    const { data: tableInfo, error: tableError } = await readOnlyClient
+                        .from(tableName)
+                        .select('*')
+                        .limit(1);
+                        
+                    if (tableError) {
+                        log(`Error checking table structure: ${tableError.message}`);
+                    } else {
+                        log('\nTable columns available:');
+                        if (tableInfo && tableInfo.length > 0) {
+                            log(Object.keys(tableInfo[0]).join(', '));
+                        } else {
+                            log('Table appears to be empty');
+                        }
+                    }
+                }
+                
+                // Count total records
+                const { count, error: countError } = await readOnlyClient
                     .from(tableName)
                     .select('*', { count: 'exact', head: true });
                     
                 if (countError) {
-                    log(`Error checking data count: ${countError.message}`);
+                    log(`Warning: Could not count records: ${countError.message}`);
                 } else {
-                    const count = countData?.length || 0;
-                    
-                    if (count > 0) {
-                        log(`Table already has ${count} rows of data. Skipping sample data insertion.`);
-                    } else {
-                        // 3. Insert sample data
-                        log('Generating sample data...');
-                        
-                        // Create sample data - 48 hours of readings at 1-hour intervals for two locations
-                        const sampleData = [];
-                        const locations = ['Makhmor Road', 'Namaz Area'];
-                        
-                        // Start from 48 hours ago
-                        const startDate = new Date();
-                        startDate.setHours(startDate.getHours() - 48);
-                        
-                        for (let hour = 0; hour < 48; hour++) {
-                            const timestamp = new Date(startDate);
-                            timestamp.setHours(startDate.getHours() + hour);
-                            
-                            // Create readings for each location
-                            locations.forEach(location => {
-                                const hourOfDay = timestamp.getHours();
-                                let basePm25 = 10; // Base level
-                                
-                                // Morning commute (7-9 AM)
-                                if (hourOfDay >= 7 && hourOfDay <= 9) {
-                                    basePm25 += 20;
-                                }
-                                // Evening commute (4-7 PM)
-                                else if (hourOfDay >= 16 && hourOfDay <= 19) {
-                                    basePm25 += 25;
-                                }
-                                // Night time (11 PM - 5 AM)
-                                else if (hourOfDay >= 23 || hourOfDay <= 5) {
-                                    basePm25 -= 5;
-                                }
-                                
-                                // Make second location generally have higher readings
-                                if (location === 'Namaz Area') {
-                                    basePm25 += 8;
-                                }
-                                
-                                // Add random variation (±30%)
-                                const randomFactor = 0.7 + (Math.random() * 0.6); // Between 0.7 and 1.3
-                                const pm25 = Math.max(1, Math.round(basePm25 * randomFactor * 10) / 10);
-                                
-                                sampleData.push({
-                                    pm25,
-                                    Location: location,
-                                    timestamp: timestamp.toISOString(),
-                                    notes: 'Sample data'
-                                });
-                            });
-                        }
-                        
-                        log(`Generated ${sampleData.length} sample readings`);
-                        
-                        // Insert the sample data in batches of 50
-                        const batchSize = 50;
-                        for (let i = 0; i < sampleData.length; i += batchSize) {
-                            const batch = sampleData.slice(i, i + batchSize);
-                            log(`Inserting batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(sampleData.length / batchSize)}...`);
-                            
-                            const { error: insertError } = await supabase
-                                .from(tableName)
-                                .insert(batch);
-                                
-                            if (insertError) {
-                                log(`Error inserting batch: ${insertError.message}`);
-                            } else {
-                                log(`Batch ${Math.floor(i / batchSize) + 1} inserted successfully`);
-                            }
-                        }
-                        
-                        log(`Sample data insertion complete. Added ${sampleData.length} readings.`);
-                    }
+                    log(`\nTotal records in database: ${count}`);
                 }
                 
-                // 4. Update the db-config.js file in memory for this session
+                // Update the db-config.js file in memory for this session
                 if (!window.dbConfig) {
                     window.dbConfig = {};
                 }
@@ -408,18 +320,76 @@
                 window.dbConfig.supabaseUrl = supabaseUrl;
                 window.dbConfig.supabaseKey = supabaseKey;
                 window.dbConfig.airQualityTableName = tableName;
+                window.dbConfig.isReadOnly = true;
+                window.dbConfig.supabase = readOnlyClient; // Store the read-only client
                 
-                log('Database initialization complete!');
+                log('\nDashboard connection established successfully!');
                 log(`\nYou can now go to the dashboard to view your data: <a href="index.html" class="text-blue-400 underline">Open Dashboard</a>`);
-                log(`\nImportant: Remember to update your db-config.js file with your API key if you want to deploy this.`);
                 
             } catch (error) {
-                log(`Error during initialization: ${error.message}`);
+                log(`Error during connection: ${error.message}`);
             } finally {
                 initBtn.disabled = false;
                 testBtn.disabled = false;
             }
         });
+        
+        // Test database connection
+        testBtn.addEventListener('click', async function() {
+            const supabaseUrl = document.getElementById('supabase_url').value;
+            const supabaseKey = document.getElementById('supabase_key').value;
+            
+            if (!supabaseKey) {
+                log('Error: Please enter your Supabase API key');
+                return;
+            }
+            
+            log('Testing dashboard connection to Supabase...');
+            
+            try {
+                // Create a read-only test client
+                const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                const readOnlyTest = {
+                    from: (table) => {
+                        const originalFrom = supabase.from(table);
+                        return {
+                            select: originalFrom.select.bind(originalFrom),
+                            insert: () => Promise.reject(new Error('Insert operations are not allowed in dashboard mode')),
+                            update: () => Promise.reject(new Error('Update operations are not allowed in dashboard mode')),
+                            delete: () => Promise.reject(new Error('Delete operations are not allowed in dashboard mode')),
+                            upsert: () => Promise.reject(new Error('Upsert operations are not allowed in dashboard mode'))
+                        };
+                    }
+                };
+                
+                // Test read access
+                const { data, error } = await readOnlyTest
+                    .from('sensor_data')
+                    .select('pm25::float4')
+                    .limit(1);
+                
+                if (error) {
+                    log(`Error: ${error.message}`);
+                    return;
+                }
+                
+                // Verify write operations are blocked
+                try {
+                    await readOnlyTest.from('sensor_data').insert([{ pm25: 0, Location: 'test' }]);
+                    log('Error: Write operations are not properly blocked');
+                } catch (e) {
+                    if (e.message.includes('not allowed in dashboard mode')) {
+                        log('Success: Write operations are properly blocked');
+                    } else {
+                        throw e;
+                    }
+                }
+                
+                log('Connection successful! Dashboard access verified.');
+            } catch (error) {
+                log(`Error: ${error.message}`);
+            }
+        });
     </script>
 </body>
-</html> 
+</html>
