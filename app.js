@@ -1,5 +1,5 @@
 // Firebase Configuration - Currently using Supabase instead
-/* 
+/*
 const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -24,8 +24,8 @@ const sensorDataRef = db.collection('sensorData');
 // SUPABASE INITIALIZATION
 let supabase;
 let mainChart;
-let location1Chart;
-let location2Chart;
+let location1Chart; // Makhmor Road Chart (if used)
+let naznazChart; // Naznaz Area Chart (formerly location2Chart)
 let humidityChart;
 
 // Constants
@@ -37,19 +37,19 @@ const timeRanges = {
 
 let currentTimeRange = '24h';
 let allReadings = [];
-let location1Data = [];
-let location2Data = [];
+let makhmorRoadData = []; // Specific variable for Makhmor Road
+let naznazAreaData = []; // Specific variable for Naznaz Area
 let currentPage = 1;
 const itemsPerPage = 10;
 
-// Global variables for both Firebase and Supabase implementation
+// Global variables for averages and predictions
 let averages = {
-    location1: {
+    'makhmor-road': { // Use internal ID
         '24h': { pm25: 0, humidity: 0 },
         '7d': { pm25: 0, humidity: 0 },
         '30d': { pm25: 0, humidity: 0 }
     },
-    location2: {
+    'naznaz-area': { // Use internal ID
         '24h': { pm25: 0, humidity: 0 },
         '7d': { pm25: 0, humidity: 0 },
         '30d': { pm25: 0, humidity: 0 }
@@ -57,9 +57,18 @@ let averages = {
 };
 
 let predictions = {
-    location1: { pm25: null, confidence: null },
-    location2: { pm25: null, confidence: null }
+    'makhmor-road': { pm25: null, confidence: null }, // Use internal ID
+    'naznaz-area': { pm25: null, confidence: null } // Use internal ID
 };
+
+// Location mapping - *** CRITICAL: Keys MUST exactly match database strings ***
+const locationMapping = {
+    // Makhmor Road
+    "36.112146, 43.953925": 'makhmor-road',
+    // Naznaz Area
+    "36.213724, 43.988080": 'naznaz-area'
+};
+
 
 // Function to show error messages to the user
 function showError(message, duration = 5000) {
@@ -68,17 +77,17 @@ function showError(message, duration = 5000) {
         console.error('Error container not found:', message);
         return;
     }
-    
+
     errorContainer.textContent = message;
     errorContainer.style.display = 'block';
-    
+
     // Hide the message after the specified duration
     setTimeout(() => {
         errorContainer.style.display = 'none';
     }, duration);
 }
 
-// Function to calculate averages for a location
+// Function to calculate averages for a location (using internal ID)
 function calculateAverages(locationData) {
     const now = new Date();
     const result = {
@@ -89,72 +98,108 @@ function calculateAverages(locationData) {
 
     Object.keys(timeRanges).forEach(range => {
         const timeLimit = timeRanges[range];
-        const relevantData = locationData.filter(reading => 
-            (now - new Date(reading.timestamp)) <= timeLimit
+        // Ensure reading.timestamp is a Date object before comparison
+        const relevantData = locationData.filter(reading =>
+             reading.timestamp instanceof Date && (now - reading.timestamp) <= timeLimit
         );
 
         if (relevantData.length > 0) {
-            result[range].pm25 = relevantData.reduce((sum, reading) => 
-                sum + reading.pm25, 0) / relevantData.length;
-            result[range].humidity = relevantData.reduce((sum, reading) => 
-                sum + (reading.humidity || 0), 0) / relevantData.length;
+            result[range].pm25 = relevantData.reduce((sum, reading) =>
+                sum + (reading.pm25 || 0), 0) / relevantData.length; // Handle potential null pm25
+            result[range].humidity = relevantData.reduce((sum, reading) =>
+                sum + (reading.humidity || 0), 0) / relevantData.length; // Handle potential null humidity
         }
     });
 
     return result;
 }
 
+
 // Function to predict PM2.5 levels (simple linear regression)
 function predictPM25Levels(locationData) {
-    if (locationData.length < 24) return { pm25: null, confidence: null };
+     // Ensure reading.timestamp is a Date object before filtering
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentData = locationData.filter(reading =>
+         reading.timestamp instanceof Date && reading.timestamp > twentyFourHoursAgo
+    );
 
-    const recent24h = locationData
-        .filter(reading => new Date(reading.timestamp) > new Date(Date.now() - 24 * 60 * 60 * 1000))
-        .map(reading => reading.pm25);
+    if (recentData.length < 12) return { pm25: null, confidence: null }; // Need at least 12 readings in last 24h
 
-    if (recent24h.length < 12) return { pm25: null, confidence: null };
+    const recentPM25 = recentData.map(reading => reading.pm25 || 0); // Default null pm25 to 0 for calculation
 
     // Simple trend-based prediction
-    const trend = recent24h[recent24h.length - 1] - recent24h[0];
-    const prediction = recent24h[recent24h.length - 1] + (trend / recent24h.length);
-    
+    const trend = recentPM25[recentPM25.length - 1] - recentPM25[0];
+    const prediction = recentPM25[recentPM25.length - 1] + (trend / recentPM25.length);
+
     // Calculate confidence based on data variance
-    const mean = recent24h.reduce((a, b) => a + b) / recent24h.length;
-    const variance = recent24h.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent24h.length;
-    const confidence = Math.max(0, Math.min(100, 100 - (variance / mean) * 10));
+    const mean = recentPM25.reduce((a, b) => a + b) / recentPM25.length;
+    const variance = recentPM25.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recentPM25.length;
+    // Avoid division by zero if mean is 0
+    const confidence = mean === 0 ? 100 : Math.max(0, Math.min(100, 100 - (variance / mean) * 10));
 
     return {
-        pm25: Math.max(0, prediction),
+        pm25: Math.max(0, prediction), // Ensure prediction is not negative
         confidence: confidence
     };
 }
 
-// DOM Elements
-const currentPM25Element = document.getElementById('current-pm25');
-const airQualityStatusElement = document.getElementById('air-quality-status');
-const averagePM25Element = document.getElementById('average-pm25');
-const lastUpdatedElement = document.getElementById('last-updated');
-const timeAgoElement = document.getElementById('time-ago');
-const location1NameElement = document.getElementById('location1-name');
-const location1PM25Element = document.getElementById('location1-pm25');
-const location1TimestampElement = document.getElementById('location1-timestamp');
-const location2NameElement = document.getElementById('location2-name');
-const location2PM25Element = document.getElementById('location2-pm25');
-const location2TimestampElement = document.getElementById('location2-timestamp');
-const readingsTableBody = document.getElementById('readings-table-body');
+
+// DOM Elements (Grouped for clarity)
+// Note: Assuming IDs in index.html are updated according to plan (e.g., 'namaz-' -> 'naznaz-')
+
+// -- General --
 const pageInfoElement = document.getElementById('page-info');
 const prevPageButton = document.getElementById('prev-page');
 const nextPageButton = document.getElementById('next-page');
 const locationFilterElement = document.getElementById('location-filter');
+const currentTimeElement = document.getElementById('current-time');
+const readingsTableBody = document.getElementById('readings-table-body'); // For desktop table view
+const readingsCards = document.getElementById('readings-cards'); // For mobile card view
+
+// -- Time Range Buttons --
 const btn24h = document.getElementById('btn-24h');
 const btn7d = document.getElementById('btn-7d');
 const btn30d = document.getElementById('btn-30d');
-const currentTimeElement = document.getElementById('current-time');
-// Use the correct chart element ID that exists in the HTML
-// const pm25TrendChart = document.getElementById('pm25-trend-chart');
 
-// Add the following functions to your app.js file, after the initializeSupabase function
-// These updates will resolve the initialization errors and data display issues
+// -- Makhmor Road Elements --
+const makhmorCurrentPM25Element = document.getElementById('makhmor-current-pm25');
+const makhmorAirQualityStatusElement = document.getElementById('makhmor-air-quality-status');
+const makhmorStatusTimeElement = document.getElementById('makhmor-status-time');
+const makhmorAveragePM25Element = document.getElementById('makhmor-average-pm25');
+const makhmorAvgChangeElement = document.getElementById('makhmor-avg-change');
+const makhmorLastUpdatedElement = document.getElementById('makhmor-last-updated');
+const makhmorTimeAgoElement = document.getElementById('makhmor-time-ago');
+const makhmorSensorStatusElement = document.getElementById('makhmor-sensor-status');
+// Detail Card Elements for Makhmor (assuming 'location1-' prefix corresponds to Makhmor)
+const location1NameElement = document.getElementById('location1-name');
+const location1PM25Element = document.getElementById('location1-pm25');
+const location1HumidityElement = document.getElementById('location1-humidity');
+const location1TimestampElement = document.getElementById('location1-timestamp');
+const location1_24hAvgElement = document.getElementById('location1-24h-avg');
+const location1_7dAvgElement = document.getElementById('location1-7d-avg');
+const location1_30dAvgElement = document.getElementById('location1-30d-avg');
+const location1PredictionElement = document.getElementById('location1-prediction');
+
+
+// -- Naznaz Area Elements (formerly Namaz) --
+const naznazCurrentPM25Element = document.getElementById('naznaz-current-pm25');
+const naznazAirQualityStatusElement = document.getElementById('naznaz-air-quality-status');
+const naznazStatusTimeElement = document.getElementById('naznaz-status-time');
+const naznazAveragePM25Element = document.getElementById('naznaz-average-pm25');
+const naznazAvgChangeElement = document.getElementById('naznaz-avg-change');
+const naznazLastUpdatedElement = document.getElementById('naznaz-last-updated');
+const naznazTimeAgoElement = document.getElementById('naznaz-time-ago');
+const naznazSensorStatusElement = document.getElementById('naznaz-sensor-status');
+// Detail Card Elements for Naznaz (assuming 'location2-'/'naznaz-' prefix corresponds to Naznaz)
+const location2NameElement = document.getElementById('naznaz-name'); // Use new ID
+const location2PM25Element = document.getElementById('naznaz-pm25'); // Use new ID
+const location2HumidityElement = document.getElementById('naznaz-humidity'); // Use new ID
+const location2TimestampElement = document.getElementById('naznaz-timestamp'); // Use new ID
+const location2_24hAvgElement = document.getElementById('naznaz-24h-avg'); // Use new ID
+const location2_7dAvgElement = document.getElementById('naznaz-7d-avg'); // Use new ID
+const location2_30dAvgElement = document.getElementById('naznaz-30d-avg'); // Use new ID
+const location2PredictionElement = document.getElementById('naznaz-prediction'); // Use new ID
+
 
 // Function to refresh dashboard data
 async function refreshData() {
@@ -180,13 +225,13 @@ async function refreshData() {
         }
 
         console.log('Starting data refresh...');
-        
-        // Fetch latest readings
+
+        // Fetch latest readings (increase limit to get more data for averages/charts)
         const { data: readings, error } = await window.dbConfig.client
             .from(window.dbConfig.airQualityTable)
-            .select('*')
+            .select('*') // Select all columns
             .order('timestamp', { ascending: false })
-            .limit(100);
+            .limit(1000); // Fetch more data for better averages/charts
 
         if (error) {
             throw new Error(`Database query failed: ${error.message}`);
@@ -194,75 +239,78 @@ async function refreshData() {
 
         if (!readings || readings.length === 0) {
             console.warn('No readings found in database');
-            updateDefaultValues();
+            updateDefaultValues(); // Update UI to show 'No Data'
+            allReadings = []; // Clear global readings cache
+            updateDataTable(); // Update table/cards to show 'No data available'
+            updateCharts({ 'makhmor-road': [], 'naznaz-area': [] }); // Clear charts
             return;
         }
 
         console.log(`Fetched ${readings.length} readings`);
+        allReadings = readings.map(r => ({ ...r, timestamp: new Date(r.timestamp) })); // Update global cache with Date objects
 
-        // Location mapping
-        const locationMapping = {
-            '36.213724, 43.988080': 'makhmor-road',
-            '36.112146, 43.953925': 'namaz-area'
+        // Process readings by location using the global mapping
+        const readingsByLocation = {
+             'makhmor-road': [],
+             'naznaz-area': []
         };
 
-        // Process readings by location
-        const readingsByLocation = {};
-        readings.forEach(reading => {
-            // Get location from the Location column
-            const location = reading.Location;
-            if (!location) {
-                console.warn('Reading found without location:', reading);
-                return;
-            }
-
-            // Map the coordinate to the correct location ID
-            const locationId = locationMapping[location];
-            if (!locationId) {
-                console.warn(`Unknown location coordinates: ${location}`);
-                return;
-            }
-            
-            if (!readingsByLocation[locationId]) {
-                readingsByLocation[locationId] = [];
-            }
-            readingsByLocation[locationId].push(reading);
-        });
-
-        console.log('Processed readings by location:', Object.keys(readingsByLocation));
-
-        // Update displays for each location
-        for (const [locationId, locationReadings] of Object.entries(readingsByLocation)) {
-            if (locationReadings.length > 0) {
-                const latestReading = locationReadings[0];
-                updateLocationDisplay(locationId, latestReading);
-                
-                // Calculate and update averages
-                if (locationReadings.length >= 24) {
-                    const averages = calculateAverages(locationReadings);
-                    updateAverageDisplay(locationId, averages);
-                }
-            }
-        }
-
-        // Ensure both locations are updated even if no data
-        const allLocations = ['makhmor-road', 'namaz-area'];
-        allLocations.forEach(locationId => {
-            if (!readingsByLocation[locationId]) {
-                updateLocationDisplay(locationId, null);
+        allReadings.forEach(reading => {
+            const locationString = reading.Location;
+            const locationId = locationMapping[locationString]; // Map DB string to internal ID
+            if (locationId && readingsByLocation[locationId]) {
+                 readingsByLocation[locationId].push(reading); // Add reading to the correct group
+            } else if(locationString) {
+                console.warn(`Unknown or unmapped location string from database: "${locationString}"`);
             }
         });
 
-        // Update charts if available
-        if (typeof updateCharts === 'function') {
-            updateCharts(readings);
+        // Update global data arrays (sorted by time, newest first)
+        makhmorRoadData = readingsByLocation['makhmor-road'].sort((a, b) => b.timestamp - a.timestamp);
+        naznazAreaData = readingsByLocation['naznaz-area'].sort((a, b) => b.timestamp - a.timestamp);
+
+        console.log(`Processed Makhmor Road: ${makhmorRoadData.length}, Naznaz Area: ${naznazAreaData.length}`);
+
+        // --- Update UI Elements ---
+
+        // Calculate Averages and Predictions using the processed data
+        if (makhmorRoadData.length > 0) {
+            averages['makhmor-road'] = calculateAverages(makhmorRoadData);
+            predictions['makhmor-road'] = predictPM25Levels(makhmorRoadData);
+            updateLocationDisplay('makhmor-road', makhmorRoadData[0]); // Update with latest reading
+        } else {
+            updateLocationDisplay('makhmor-road', null); // No data for Makhmor
         }
+
+        if (naznazAreaData.length > 0) {
+            averages['naznaz-area'] = calculateAverages(naznazAreaData);
+            predictions['naznaz-area'] = predictPM25Levels(naznazAreaData);
+            updateLocationDisplay('naznaz-area', naznazAreaData[0]); // Update with latest reading
+        } else {
+            updateLocationDisplay('naznaz-area', null); // No data for Naznaz
+        }
+
+        // Update average and prediction display sections
+        updateAveragesDisplay();
+        updatePredictionsDisplay();
+
+        // Update the data table/cards (uses allReadings)
+        updateDataTable();
+
+        // Update the main trend chart
+        updateCharts(readingsByLocation); // Pass the grouped data
+
+        // Update map data (if function exists)
+         if (typeof window.updateMapData === 'function') {
+             window.updateMapData(); // Call map update function
+         }
+
 
         console.log('Data refresh completed successfully');
-        
+
     } catch (error) {
         console.error('Error in refreshData:', error);
-        
+
         // Handle configuration errors specially
         if (error.type === 'CONFIG_ERROR') {
             showError(error.message);
@@ -273,173 +321,172 @@ async function refreshData() {
         } else {
             showError('Failed to refresh data. Please check the console for details.');
         }
-        
-        // Set default values for UI elements
+
+        // Set default values for UI elements if refresh fails
         updateDefaultValues();
+        allReadings = [];
+        updateDataTable();
+        updateCharts({ 'makhmor-road': [], 'naznaz-area': [] });
     }
 }
 
-// Helper function to update UI with default values
+
+// Helper function to update UI with default values for all locations
 function updateDefaultValues() {
-    const locations = ['makhmor-road', 'namaz-area'];
+    const locations = ['makhmor-road', 'naznaz-area'];
     locations.forEach(locationId => {
-        updateLocationDisplay(locationId, null);
+        updateLocationDisplay(locationId, null); // Call updateLocationDisplay with null reading
     });
+    // Reset global averages and predictions
+    Object.keys(averages).forEach(locId => {
+        Object.keys(averages[locId]).forEach(range => {
+            averages[locId][range] = { pm25: 0, humidity: 0 };
+        });
+    });
+     Object.keys(predictions).forEach(locId => {
+         predictions[locId] = { pm25: null, confidence: null };
+     });
+    updateAveragesDisplay();
+    updatePredictionsDisplay();
 }
 
-// Function to update a location's display elements
-function updateLocationDisplay(location, reading) {
-    const prefix = location.toLowerCase().includes('makhmor') ? 'makhmor' : 'namaz';
-    
+// Function to update a specific location's display elements
+function updateLocationDisplay(locationId, reading) {
+    const prefix = locationId === 'makhmor-road' ? 'makhmor' : 'naznaz'; // Use 'naznaz' prefix for Naznaz Area
+    const isMakhmor = locationId === 'makhmor-road';
+    const detailPrefix = isMakhmor ? 'location1' : 'naznaz'; // Use 'naznaz' for detail card IDs too
+    const locationName = isMakhmor ? 'Makhmor Road' : 'Naznaz Area';
+
+
+    // Get elements using the determined prefixes
+    const currentPM25Element = document.getElementById(`${prefix}-current-pm25`);
+    const airQualityStatusElement = document.getElementById(`${prefix}-air-quality-status`);
+    const statusTimeElement = document.getElementById(`${prefix}-status-time`); // Overview card time
+    const lastUpdatedElement = document.getElementById(`${prefix}-last-updated`); // Overview card last updated
+    const timeAgoElement = document.getElementById(`${prefix}-time-ago`); // Overview card time ago
+    const averagePM25Element = document.getElementById(`${prefix}-average-pm25`); // Overview card 24h average
+    const avgChangeElement = document.getElementById(`${prefix}-avg-change`); // Overview card % change (optional)
+    const sensorStatusElement = document.getElementById(`${prefix}-sensor-status`); // Overview card sensor status
+
+    // Detail card elements
+    const detailNameElement = document.getElementById(`${detailPrefix}-name`);
+    const detailPM25Element = document.getElementById(`${detailPrefix}-pm25`);
+    const detailHumidityElement = document.getElementById(`${detailPrefix}-humidity`);
+    const detailTimestampElement = document.getElementById(`${detailPrefix}-timestamp`);
+
+
     if (!reading) {
-        console.warn(`No reading provided for ${location}`);
-        updateDefaultValues(prefix);
+        console.warn(`No reading provided for ${locationId}`);
+        // Set all elements to default/error state
+        if (currentPM25Element) currentPM25Element.textContent = '--';
+        if (airQualityStatusElement) {
+            airQualityStatusElement.textContent = 'No Data';
+            airQualityStatusElement.className = 'inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600';
+        }
+        if (statusTimeElement) statusTimeElement.textContent = 'Updating...';
+        if (lastUpdatedElement) lastUpdatedElement.textContent = 'Unknown';
+        if (timeAgoElement) timeAgoElement.textContent = 'Loading...';
+        if (averagePM25Element) averagePM25Element.textContent = '--';
+         if (avgChangeElement) {
+             avgChangeElement.textContent = '--';
+             avgChangeElement.className = 'flex items-center text-xs font-medium text-gray-500'; // Reset style
+         }
+        if (sensorStatusElement) {
+            sensorStatusElement.textContent = 'Unknown';
+            sensorStatusElement.className = 'text-xl font-bold text-gray-500'; // Reset style
+        }
+         // Detail card defaults
+         if (detailNameElement) detailNameElement.textContent = locationName; // Show name even if no data
+         if (detailPM25Element) detailPM25Element.textContent = '-- μg/m³';
+         if (detailHumidityElement) detailHumidityElement.textContent = '--%';
+         if (detailTimestampElement) detailTimestampElement.textContent = '--:--';
+
+        // Update sensor status via sensor-status.js if needed (it checks time difference)
+         if (window.sensorStatus && typeof window.sensorStatus.updateLastUpdate === 'function') {
+             // We don't have a timestamp, but calling update might trigger the 'Offline' state correctly
+             window.sensorStatus.updateLastUpdate(locationName, null);
+         }
         return;
     }
 
+    // --- Update elements with reading data ---
     try {
-        // Update PM2.5 value
-        const pm25Element = document.getElementById(`${prefix}-current-pm25`);
-        if (pm25Element) {
-            pm25Element.textContent = reading.pm25 ? reading.pm25.toFixed(1) : '--';
-            console.log(`Updated PM2.5 value for ${location} to ${reading.pm25 ? reading.pm25.toFixed(1) : '--'}`);
+        const pm25Value = reading.pm25 !== null && reading.pm25 !== undefined ? parseFloat(reading.pm25) : null;
+        const humidityValue = reading.humidity !== null && reading.humidity !== undefined ? parseFloat(reading.humidity) : null; // Assuming 'humidity' column exists
+        const timestamp = reading.timestamp; // Already a Date object
+
+
+        // Update PM2.5 value (Overview)
+        if (currentPM25Element) {
+            currentPM25Element.textContent = pm25Value !== null ? pm25Value.toFixed(1) : '--';
         }
 
-        // Update air quality status
-        const qualityStatusElement = document.getElementById(`${prefix}-air-quality-status`);
-        if (qualityStatusElement) {
-            const { status, bgColor, textColor } = getAirQualityStatus(reading.pm25);
-            qualityStatusElement.textContent = status;
-            qualityStatusElement.className = `px-3 py-1 rounded-full ${bgColor} ${textColor}`;
-            console.log(`Updated air quality status for ${location} to ${status}`);
+        // Update air quality status (Overview)
+        if (airQualityStatusElement && pm25Value !== null) {
+            const { status, bgColor, textColor } = getAirQualityStatus(pm25Value);
+            airQualityStatusElement.textContent = status;
+            // Ensure Tailwind classes are applied correctly
+            airQualityStatusElement.className = `inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${bgColor} ${textColor} shadow-sm`;
+        } else if (airQualityStatusElement) {
+             airQualityStatusElement.textContent = 'No Data';
+             airQualityStatusElement.className = 'inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600 shadow-sm';
         }
 
-        // Update timestamp
-        const timeElement = document.getElementById(`${prefix}-status-time`);
-        const lastUpdatedElement = document.getElementById(`${prefix}-last-updated`);
-        const timeAgoElement = document.getElementById(`${prefix}-time-ago`);
-        
-        if (reading.timestamp) {
-            const timestamp = new Date(reading.timestamp);
-            if (timeElement) {
-                timeElement.textContent = timestamp.toLocaleTimeString();
-            }
-            if (lastUpdatedElement) {
-                lastUpdatedElement.textContent = `Last updated: ${timestamp.toLocaleString()}`;
-            }
-            if (timeAgoElement) {
-                const timeAgo = Math.floor((Date.now() - timestamp) / 1000 / 60);
-                timeAgoElement.textContent = `${timeAgo} minutes ago`;
-            }
-            console.log(`Updated timestamp elements for ${location}`);
+        // Update timestamp elements (Overview)
+        if (timestamp instanceof Date && !isNaN(timestamp)) {
+             if (statusTimeElement) statusTimeElement.textContent = `As of ${timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+             if (lastUpdatedElement) lastUpdatedElement.textContent = timestamp.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+             if (timeAgoElement) timeAgoElement.textContent = getTimeAgo(timestamp); // Update time ago
+
+             // Update sensor status using sensor-status.js
+             if (window.sensorStatus && typeof window.sensorStatus.updateLastUpdate === 'function') {
+                 window.sensorStatus.updateLastUpdate(locationName, timestamp); // Pass name and timestamp
+             }
+        } else {
+             if (statusTimeElement) statusTimeElement.textContent = 'Invalid Time';
+             if (lastUpdatedElement) lastUpdatedElement.textContent = 'Invalid Time';
+             if (timeAgoElement) timeAgoElement.textContent = 'Error';
         }
 
-        // Update 24-hour average
-        const avgElement = document.getElementById(`${prefix}-average-pm25`);
-        const avgChangeElement = document.getElementById(`${prefix}-avg-change`);
-        
-        if (avgElement && reading.average24h) {
-            avgElement.textContent = reading.average24h.toFixed(1);
+
+        // Update 24-hour average (Overview) - uses calculated average
+        const avg24h = averages[locationId] ? averages[locationId]['24h'].pm25 : 0;
+        if (averagePM25Element) {
+            averagePM25Element.textContent = avg24h.toFixed(1);
         }
-        
-        if (avgChangeElement && reading.averageChange) {
-            const changePercent = (reading.averageChange * 100).toFixed(1);
-            const arrow = reading.averageChange > 0 ? '↑' : '↓';
-            avgChangeElement.textContent = `${arrow} ${Math.abs(changePercent)}%`;
-            avgChangeElement.className = reading.averageChange > 0 
-                ? 'text-red-600' 
-                : 'text-green-600';
+        // Optional: Update average change indicator (requires previous average)
+        // if (avgChangeElement) { ... logic to calculate and display change ... }
+
+
+        // Update Detail Card Elements
+        if (detailNameElement) detailNameElement.textContent = locationName;
+        if (detailPM25Element) detailPM25Element.textContent = pm25Value !== null ? `${pm25Value.toFixed(1)} μg/m³` : '-- μg/m³';
+        if (detailHumidityElement) detailHumidityElement.textContent = humidityValue !== null ? `${humidityValue.toFixed(1)}%` : '--%';
+        if (detailTimestampElement && timestamp instanceof Date && !isNaN(timestamp)) {
+             detailTimestampElement.textContent = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (detailTimestampElement) {
+             detailTimestampElement.textContent = '--:--';
         }
 
-        // Update sensor status
-        const sensorStatusElement = document.getElementById(`${prefix}-sensor-status`);
-        if (sensorStatusElement) {
-            const timestamp = new Date(reading.timestamp);
-            const isOffline = Date.now() - timestamp > 6 * 60 * 60 * 1000; // 6 hours
-            sensorStatusElement.textContent = isOffline ? 'Offline' : 'Online';
-            sensorStatusElement.className = isOffline 
-                ? 'px-3 py-1 rounded-full bg-red-100 text-red-800'
-                : 'px-3 py-1 rounded-full bg-green-100 text-green-800';
-            console.log(`Updated sensor status for ${location} to ${isOffline ? 'Offline' : 'Online'}`);
-        }
+
     } catch (error) {
-        console.error(`Error updating display for ${location}:`, error);
-        updateDefaultValues(prefix);
+        console.error(`Error updating display for ${locationId}:`, error);
+        // Optionally call updateDefaultValuesForPrefix(prefix) or similar here
     }
 }
 
-function updateDefaultValues(prefix) {
-    const elements = {
-        [`${prefix}-current-pm25`]: '--',
-        [`${prefix}-air-quality-status`]: 'No Data',
-        [`${prefix}-status-time`]: '--:--',
-        [`${prefix}-last-updated`]: 'Last updated: Unknown',
-        [`${prefix}-time-ago`]: '--',
-        [`${prefix}-average-pm25`]: '--',
-        [`${prefix}-avg-change`]: '--',
-        [`${prefix}-sensor-status`]: 'Unknown'
-    };
 
-    Object.entries(elements).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = value;
-            // Reset classes for status elements
-            if (id.includes('air-quality-status')) {
-                element.className = 'px-3 py-1 rounded-full bg-gray-100 text-gray-600';
-            } else if (id.includes('sensor-status')) {
-                element.className = 'px-3 py-1 rounded-full bg-gray-100 text-gray-600';
-            }
-        }
-    });
-}
-
+// Get Air Quality Status based on PM2.5 value
 function getAirQualityStatus(pm25) {
-    if (pm25 === undefined || pm25 === null) {
-        return {
-            status: 'No Data',
-            bgColor: 'bg-gray-100',
-            textColor: 'text-gray-600'
-        };
+    if (pm25 === undefined || pm25 === null || isNaN(pm25)) {
+        return { status: 'No Data', bgColor: 'bg-gray-100', textColor: 'text-gray-600' };
     }
-
-    if (pm25 <= 12) {
-        return {
-            status: 'Good',
-            bgColor: 'bg-green-100',
-            textColor: 'text-green-800'
-        };
-    } else if (pm25 <= 35.4) {
-        return {
-            status: 'Moderate',
-            bgColor: 'bg-yellow-100',
-            textColor: 'text-yellow-800'
-        };
-    } else if (pm25 <= 55.4) {
-        return {
-            status: 'Unhealthy for Sensitive Groups',
-            bgColor: 'bg-orange-100',
-            textColor: 'text-orange-800'
-        };
-    } else if (pm25 <= 150.4) {
-        return {
-            status: 'Unhealthy',
-            bgColor: 'bg-red-100',
-            textColor: 'text-red-800'
-        };
-    } else if (pm25 <= 250.4) {
-        return {
-            status: 'Very Unhealthy',
-            bgColor: 'bg-purple-100',
-            textColor: 'text-purple-800'
-        };
-    } else {
-        return {
-            status: 'Hazardous',
-            bgColor: 'bg-red-900',
-            textColor: 'text-white'
-        };
-    }
+    if (pm25 <= 12) return { status: 'Good', bgColor: 'bg-green-100', textColor: 'text-green-800' };
+    if (pm25 <= 35.4) return { status: 'Moderate', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' };
+    if (pm25 <= 55.4) return { status: 'Unhealthy for Sensitive Groups', bgColor: 'bg-orange-100', textColor: 'text-orange-800' };
+    if (pm25 <= 150.4) return { status: 'Unhealthy', bgColor: 'bg-red-100', textColor: 'text-red-800' };
+    if (pm25 <= 250.4) return { status: 'Very Unhealthy', bgColor: 'bg-purple-100', textColor: 'text-purple-800' };
+    return { status: 'Hazardous', bgColor: 'bg-red-900', textColor: 'text-white' }; // Use darker red for Hazardous
 }
 
 // Initialize Supabase client
@@ -448,28 +495,47 @@ async function initializeSupabase() {
         if (!window.dbConfig) {
             throw new Error('Database configuration not found. Make sure db-config.js is loaded.');
         }
-
-        // Check if we have an API key
         if (!window.dbConfig.supabaseKey) {
-            throw new Error('Supabase API key not found. Please set your API key first.');
+            // Try to get key from localStorage again, in case init-db.html was just used
+            window.dbConfig.supabaseKey = localStorage.getItem('supabase_api_key');
+            if (!window.dbConfig.supabaseKey) {
+                throw new Error('Supabase API key not found. Please set your API key first (e.g., using init-db.html).');
+            } else {
+                 console.log("Retrieved API key from localStorage.");
+            }
         }
 
-        // Initialize the client if not already initialized
-        if (!window.dbConfig.supabase) {
-            const supabase = window.supabase.createClient(
-                window.dbConfig.supabaseUrl,
-                window.dbConfig.supabaseKey
-            );
-            window.dbConfig.supabase = supabase;
+        // Initialize the client if not already initialized OR if key changed
+        if (!window.dbConfig.client || window.dbConfig.client.supabaseKey !== window.dbConfig.supabaseKey) {
+             if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
+                window.dbConfig.client = window.supabase.createClient(
+                    window.dbConfig.supabaseUrl,
+                    window.dbConfig.supabaseKey
+                );
+                 console.log("Supabase client initialized or re-initialized.");
+             } else {
+                 throw new Error('Supabase library (supabase-js) not loaded correctly.');
+             }
+        } else {
+            console.log("Supabase client already initialized.");
         }
 
-        // Test the connection
-        const { data, error } = await window.dbConfig.supabase
+
+        // Test the connection using the initialized client
+        const { data, error } = await window.dbConfig.client
             .from(window.dbConfig.airQualityTable)
             .select('id')
             .limit(1);
 
         if (error) {
+            // Provide more specific error feedback
+            if (error.message.includes('Invalid API key') || error.message.includes('Unauthorized')) {
+                 throw new Error(`Database connection test failed: Invalid API Key. Please check your key in init-db.html.`);
+            } else if (error.message.includes('fetch failed')) {
+                 throw new Error(`Database connection test failed: Network error. Check internet connection and Supabase URL.`);
+            } else if (error.message.includes('relation') && error.message.includes('does not exist')) {
+                throw new Error(`Database connection test failed: Table '${window.dbConfig.airQualityTable}' not found. Ensure the table exists in Supabase.`);
+            }
             throw new Error(`Database connection test failed: ${error.message}`);
         }
 
@@ -477,758 +543,393 @@ async function initializeSupabase() {
         return true;
     } catch (error) {
         console.error('Failed to initialize Supabase:', error);
-        showError(`Database initialization failed: ${error.message}`);
+        showError(`Database initialization failed: ${error.message}. Please check configuration and network.`);
+        // Attempt to clear potentially bad key from storage
+        try { localStorage.removeItem('supabase_api_key'); } catch(e) {}
         return false;
     }
 }
 
-async function fetchLatestReadings() {
-    try {
-        if (!window.dbConfig || !window.dbConfig.supabase) {
-            throw new Error('Supabase client not initialized');
-        }
-
-        console.log('Fetching latest readings...');
-        const { data, error } = await window.dbConfig.supabase
-            .from(window.dbConfig.airQualityTable)
-            .select('*')
-            .order('timestamp', { ascending: false })
-            .limit(100);
-
-        if (error) {
-            throw new Error(`Failed to fetch readings: ${error.message}`);
-        }
-
-        if (!data || data.length === 0) {
-            console.warn('No readings found in the database');
-            showError('No sensor readings available in the database');
-            return [];
-        }
-
-        console.log(`Fetched ${data.length} readings successfully`);
-        
-        // Update sensor status for each location
-        const locations = [...new Set(data.map(reading => reading.location))];
-        locations.forEach(location => {
-            const latestReading = data.find(reading => reading.location === location);
-            if (latestReading) {
-                window.sensorStatus.updateLastUpdate(location, latestReading.timestamp);
-            }
-        });
-
-        return data;
-    } catch (error) {
-        console.error('Error fetching readings:', error);
-        showError(`Failed to fetch sensor readings: ${error.message}`);
-        return [];
-    }
-}
 
 // Initialize the dashboard
 async function initDashboard() {
-    const loadingElement = document.getElementById('loading-indicator');
-    const mainContent = document.getElementById('main-content');
-    
+    // Use less obtrusive loading indication if possible
+    console.log('Initializing dashboard...');
+
     try {
-        console.log('Initializing dashboard...');
-        
-        if (loadingElement) loadingElement.style.display = 'block';
-        if (mainContent) mainContent.style.opacity = '0.5';
-        
         // Initialize Supabase first
         const supabaseInitialized = await initializeSupabase();
         if (!supabaseInitialized) {
-            throw new Error('Failed to initialize database connection. Please check your configuration.');
+            // Error is already shown by initializeSupabase()
+            console.error('Dashboard initialization halted due to Supabase connection failure.');
+            return; // Stop initialization if DB connection fails
         }
         console.log('Database connection initialized');
 
         // Initialize sensor status tracking
         try {
             if (window.sensorStatus && typeof window.sensorStatus.init === 'function') {
-                await window.sensorStatus.init();
+                window.sensorStatus.init(); // Use await if init returns a promise
                 console.log('Sensor status tracking initialized');
             } else {
-                console.warn('Sensor status tracking not available');
+                console.warn('Sensor status tracking module not available or init function missing.');
             }
         } catch (sensorError) {
             console.error('Error initializing sensor status:', sensorError);
-            // Non-critical error, continue initialization
+            showError('Failed to initialize sensor status display.'); // Inform user
         }
-        
+
         // Set up event listeners
-    setupEventListeners();
+        setupEventListeners();
         console.log('Event listeners initialized');
-        
+
         // Initialize charts
         const chartsInitialized = initCharts();
         if (!chartsInitialized) {
-            throw new Error('Failed to initialize charts. Please check if the chart container exists.');
+            // Error handled within initCharts
+            showError('Failed to initialize charts. Chart display might be unavailable.');
+        } else {
+            console.log('Charts initialized');
         }
-        console.log('Charts initialized');
-        
-        // Initialize the map
+
+
+        // Initialize the map (assuming map initialization code is in index.html <script> block)
         try {
-            initMap();
-            console.log('Map initialized');
+            if (typeof L !== 'undefined' && typeof initMap === 'function') {
+                 // initMap(); // If you have a separate initMap function
+                 console.log('Map initialization logic should run from index.html.');
+            } else {
+                 console.warn('Leaflet library (L) or initMap function not found. Map might not display.');
+            }
         } catch (mapError) {
             console.error('Error initializing map:', mapError);
-            showError('Map initialization failed, but dashboard will continue to function');
+            showError('Map initialization failed.');
         }
-        
+
         // Fetch initial data
         await refreshData();
         console.log('Initial data fetched');
-        
+
         // Start periodic updates
-        setInterval(refreshData, 60000); // Update every minute
-        
+        setInterval(refreshData, 30000); // Update every 30 seconds
+
         console.log('Dashboard initialized successfully');
-        
-        // Show success message
-        const successMsg = document.getElementById('success-message');
-        if (successMsg) {
-            successMsg.textContent = 'Dashboard initialized successfully';
-            successMsg.style.display = 'block';
-            setTimeout(() => successMsg.style.display = 'none', 3000);
-        }
+
     } catch (error) {
-        console.error('Error initializing dashboard:', error);
+        console.error('Error during dashboard initialization:', error);
         showError('Failed to initialize dashboard: ' + error.message);
-    } finally {
-        if (loadingElement) loadingElement.style.display = 'none';
-        if (mainContent) mainContent.style.opacity = '1';
     }
 }
 
 // Initialize charts
 function initCharts() {
     try {
-        const chartElement = document.getElementById('air-quality-chart');
-        if (!chartElement) {
-            console.error('Chart element not found');
-            return false;
-        }
+        // --- Initialize Main Trend Chart ---
+        const mainChartElement = document.getElementById('air-quality-chart');
+        if (!mainChartElement) {
+            console.error('Main chart element (air-quality-chart) not found.');
+            // Don't stop everything, just main chart won't work
+        } else {
+            const ctxMain = mainChartElement.getContext('2d');
+            if (!ctxMain) {
+                console.error('Failed to get main chart context.');
+            } else {
+                 // Set Chart.js defaults
+                Chart.defaults.font.family = "'Manrope', sans-serif";
+                Chart.defaults.color = '#64748B'; // Default text color (slate-500)
+                Chart.defaults.elements.line.tension = 0.4;
+                Chart.defaults.elements.line.borderWidth = 2;
+                Chart.defaults.elements.point.radius = 0; // No points by default
+                Chart.defaults.elements.point.hoverRadius = 6; // Larger hover points
+                Chart.defaults.elements.point.hitRadius = 10; // Easier to hit points
 
-        const ctx = chartElement.getContext('2d');
-        if (!ctx) {
-            console.error('Failed to get chart context');
-            return false;
-        }
+                // Create gradient for Makhmor Road
+                const gradientMakhmor = ctxMain.createLinearGradient(0, 0, 0, 320); // Height approx 320px
+                gradientMakhmor.addColorStop(0, 'rgba(255, 122, 0, 0.3)'); // Orange start, more opaque
+                gradientMakhmor.addColorStop(1, 'rgba(255, 122, 0, 0)'); // Orange end, transparent
 
-        // Set Chart.js defaults
-        Chart.defaults.font.family = "'Manrope', sans-serif";
-        Chart.defaults.color = '#94A3B8';
-        Chart.defaults.elements.line.tension = 0.4;
-        Chart.defaults.elements.line.borderWidth = 2;
-        Chart.defaults.elements.point.radius = 0;
-        Chart.defaults.elements.point.hoverRadius = 5;
+                 // Create gradient for Naznaz Area
+                const gradientNaznaz = ctxMain.createLinearGradient(0, 0, 0, 320);
+                gradientNaznaz.addColorStop(0, 'rgba(59, 130, 246, 0.3)'); // Blue start, more opaque
+                gradientNaznaz.addColorStop(1, 'rgba(59, 130, 246, 0)'); // Blue end, transparent
 
-        // Create gradient for background
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(255, 122, 0, 0.1)');
-        gradient.addColorStop(1, 'rgba(255, 122, 0, 0)');
-
-        // Initialize main chart
-        mainChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                datasets: [
-                    {
-                        label: 'Makhmor Road',
-                        borderColor: '#F97316',
-                        backgroundColor: gradient,
-                        data: [],
-                        yAxisID: 'pm25',
-                        borderWidth: 3
-                    },
-                    {
-                        label: 'Namaz Area',
-                        borderColor: '#3B82F6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        data: [],
-                        yAxisID: 'pm25',
-                        borderWidth: 3
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    tooltip: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        titleColor: '#E2E8F0',
-                        bodyColor: '#94A3B8',
-                        titleFont: {
-                            weight: 'bold',
-                        },
-                        bodyFont: {
-                            size: 12,
-                        },
-                        padding: 12,
-                        boxPadding: 6,
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.dataset.label}: ${context.parsed.y} μg/m³`;
-                            }
-                        }
-                    },
-                    legend: {
-                        position: 'top',
-                        align: 'start',
-                        labels: {
-                            boxWidth: 12,
-                            boxHeight: 12,
-                            padding: 20,
-                            color: '#1F2937',
-                            font: {
-                                size: 14,
-                                weight: '600'
+                mainChart = new Chart(ctxMain, {
+                    type: 'line',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Makhmor Road',
+                                borderColor: '#F97316', // Orange-600
+                                backgroundColor: gradientMakhmor,
+                                pointBackgroundColor: '#F97316',
+                                pointBorderColor: '#ffffff',
+                                pointHoverBackgroundColor: '#ffffff',
+                                pointHoverBorderColor: '#F97316',
+                                data: [],
+                                yAxisID: 'yPm25', // Assign to PM2.5 axis
+                                fill: true, // Fill area under line
+                                borderWidth: 2.5
                             },
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: {
-                            unit: 'hour',
-                            displayFormats: {
-                                hour: 'HH:mm',
-                                day: 'MMM D'
+                            {
+                                label: 'Naznaz Area', // Corrected Label
+                                borderColor: '#3B82F6', // Blue-500
+                                backgroundColor: gradientNaznaz,
+                                pointBackgroundColor: '#3B82F6',
+                                pointBorderColor: '#ffffff',
+                                pointHoverBackgroundColor: '#ffffff',
+                                pointHoverBorderColor: '#3B82F6',
+                                data: [],
+                                yAxisID: 'yPm25', // Assign to PM2.5 axis
+                                fill: true, // Fill area under line
+                                borderWidth: 2.5
                             }
-                        },
-                        grid: {
-                            display: false
-                        },
-                        ticks: {
-                            color: '#94A3B8'
-                        }
+                            // Add Humidity datasets here if needed, assign to yHumidity axis
+                        ]
                     },
-                    pm25: {
-                        type: 'linear',
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: 'PM2.5 (μg/m³)',
-                            color: '#94A3B8'
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index', // Show tooltips for all datasets at that index
+                            intersect: false, // Tooltip activates even if not directly hovering point
+                            axis: 'x' // Interaction along the x-axis
                         },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
+                        plugins: {
+                            tooltip: {
+                                enabled: true,
+                                backgroundColor: 'rgba(15, 23, 42, 0.9)', // Dark background (slate-900)
+                                titleColor: '#E2E8F0', // Light title (slate-200)
+                                bodyColor: '#94A3B8', // Medium body (slate-400)
+                                titleFont: { weight: 'bold', size: 14 },
+                                bodyFont: { size: 12 },
+                                padding: 12,
+                                boxPadding: 6,
+                                cornerRadius: 6,
+                                displayColors: true, // Show color boxes
+                                usePointStyle: true, // Use point style in tooltip color box
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            // Check axis ID to determine unit
+                                            const axisId = context.dataset.yAxisID;
+                                            const unit = axisId === 'yHumidity' ? '%' : ' μg/m³';
+                                            label += `${context.parsed.y.toFixed(1)}${unit}`;
+                                        }
+                                        return label;
+                                    },
+                                     title: function(tooltipItems) {
+                                         // Format the title (timestamp) nicely
+                                         const date = new Date(tooltipItems[0].parsed.x);
+                                         return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short'});
+                                     }
+                                }
+                            },
+                            legend: {
+                                position: 'bottom', // Position legend at the bottom
+                                align: 'center',
+                                labels: {
+                                    boxWidth: 12,
+                                    boxHeight: 12,
+                                    padding: 20,
+                                    color: '#1F2937', // Darker legend text (slate-800)
+                                    font: { size: 13, weight: '500' },
+                                    usePointStyle: true,
+                                    pointStyle: 'circle'
+                                }
+                            },
+                            // Optional: Add chartjs-plugin-annotation for thresholds if needed
                         },
-                        ticks: {
-                            color: '#94A3B8'
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    unit: 'hour', // Default unit, will be adjusted by setTimeRange
+                                    tooltipFormat: 'MMM d, yyyy, h:mm a', // Format for tooltip title
+                                    displayFormats: { // How labels appear on the axis
+                                        hour: 'HH:mm', // e.g., 14:00
+                                        day: 'MMM d', // e.g., Apr 22
+                                        // month: 'MMM yyyy' // If zooming out further
+                                    }
+                                },
+                                grid: {
+                                    display: false // Hide vertical grid lines
+                                },
+                                ticks: {
+                                    color: '#64748B', // Axis ticks color (slate-500)
+                                    major: {
+                                        enabled: true // Enable major ticks for better readability on time axis
+                                    },
+                                    font: { size: 11 },
+                                     maxRotation: 0, // Prevent labels from rotating
+                                     autoSkip: true, // Automatically skip labels to prevent overlap
+                                     maxTicksLimit: 10 // Limit number of ticks shown
+                                }
+                            },
+                            yPm25: { // Axis for PM2.5
+                                type: 'linear',
+                                position: 'left',
+                                beginAtZero: true, // Start axis at 0
+                                title: {
+                                    display: true,
+                                    text: 'PM2.5 (μg/m³)',
+                                    color: '#475569', // Axis title color (slate-600)
+                                    font: { size: 12, weight: '600' }
+                                },
+                                grid: {
+                                    color: '#E2E8F0', // Lighter grid lines (slate-200)
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#64748B', // Axis ticks color (slate-500)
+                                    font: { size: 11 },
+                                     padding: 5
+                                }
+                            }
+                            // Add yHumidity axis definition here if tracking humidity
+                            /*
+                            yHumidity: { // Axis for Humidity
+                                type: 'linear',
+                                position: 'right', // Position on the right
+                                beginAtZero: true,
+                                suggestedMax: 100, // Max humidity is 100%
+                                title: {
+                                    display: true,
+                                    text: 'Humidity (%)',
+                                    color: '#475569',
+                                    font: { size: 12, weight: '600' }
+                                },
+                                grid: {
+                                    drawOnChartArea: false, // Don't draw grid lines for the right axis
+                                },
+                                ticks: {
+                                    color: '#64748B',
+                                    font: { size: 11 },
+                                     padding: 5
+                                }
+                            }
+                            */
                         }
                     }
-                }
+                });
+                console.log("Main trend chart initialized.");
             }
-        });
+        }
 
-        return true;
+        // --- Initialize Individual Location Charts (Optional - if using location1-chart, naznaz-chart) ---
+        // Example for Makhmor (location1)
+        const loc1ChartElement = document.getElementById('location1-chart');
+        if (loc1ChartElement) {
+            const ctxLoc1 = loc1ChartElement.getContext('2d');
+            if (ctxLoc1) {
+                 // location1Chart = new Chart(ctxLoc1, { /* ... config ... */ });
+                 console.log("Placeholder: Initialize Makhmor Road detail chart.");
+            }
+        }
+        // Example for Naznaz (using new ID)
+        const nazChartElement = document.getElementById('naznaz-chart');
+        if (nazChartElement) {
+             const ctxNaz = nazChartElement.getContext('2d');
+             if (ctxNaz) {
+                 // naznazChart = new Chart(ctxNaz, { /* ... config ... */ });
+                 console.log("Placeholder: Initialize Naznaz Area detail chart.");
+             }
+        }
+
+
+        return true; // Indicate charts initialized (at least tried)
     } catch (error) {
         console.error('Error initializing charts:', error);
+        showError('Could not initialize charts: ' + error.message);
         return false;
     }
 }
 
-// Update the dashboard with the latest data
-async function updateDashboard() {
-    try {
-        // Fetch the latest readings from Supabase
-        const { data: readings, error } = await supabase
-            .from('sensor_data')
-            .select('*')
-            .order('timestamp', { ascending: false })
-            .limit(48); // Get last 48 readings (24 hours assuming 30-minute intervals)
-
-        if (error) {
-            showError('Failed to fetch readings from database: ' + error.message);
-            console.error('Error fetching readings:', error);
-            return;
-        }
-
-        if (!readings || readings.length === 0) {
-            showError('No readings available from the sensors. Please check sensor connectivity.');
-            console.log('No readings available');
-            // Set default values for both locations
-            updateDefaultValues('location1');
-            updateDefaultValues('location2');
-            return;
-        }
-
-        // Process readings for both locations
-        const location1Readings = readings.filter(reading => reading.location === 'Makhmor Road');
-        const location2Readings = readings.filter(reading => reading.location === 'Namaz Area');
-
-        try {
-            // Update Location 1 (Makhmor Road)
-            if (location1Readings.length > 0) {
-                updateLocationData('location1', location1Readings);
-    } else {
-                showError('No readings available for Makhmor Road sensor');
-                updateDefaultValues('location1');
-            }
-        } catch (err) {
-            showError('Error updating Makhmor Road dashboard: ' + err.message);
-            console.error('Error updating location 1:', err);
-            updateDefaultValues('location1');
-        }
-
-        try {
-            // Update Location 2 (Namaz Area)
-            if (location2Readings.length > 0) {
-                updateLocationData('location2', location2Readings);
-            } else {
-                showError('No readings available for Namaz Area sensor');
-                updateDefaultValues('location2');
-            }
-        } catch (err) {
-            showError('Error updating Namaz Area dashboard: ' + err.message);
-            console.error('Error updating location 2:', err);
-            updateDefaultValues('location2');
-        }
-
-    } catch (err) {
-        showError('Failed to update dashboard: ' + err.message);
-        console.error('Error in updateDashboard:', err);
-        // Set default values for both locations
-        updateDefaultValues('location1');
-        updateDefaultValues('location2');
-    }
-}
-
-// Update air quality status with location-specific elements
-function updateAirQualityStatus(pm25, location) {
-    let status, bgColor, textColor;
-    
-    if (pm25 <= 12) {
-        status = 'Good';
-        bgColor = 'bg-green-100';
-        textColor = 'text-green-800';
-    } else if (pm25 <= 35.4) {
-        status = 'Moderate';
-        bgColor = 'bg-yellow-100';
-        textColor = 'text-yellow-800';
-    } else if (pm25 <= 55.4) {
-        status = 'Unhealthy for Sensitive Groups';
-        bgColor = 'bg-orange-100';
-        textColor = 'text-orange-800';
-    } else if (pm25 <= 150.4) {
-        status = 'Unhealthy';
-        bgColor = 'bg-red-100';
-        textColor = 'text-red-800';
-    } else if (pm25 <= 250.4) {
-        status = 'Very Unhealthy';
-        bgColor = 'bg-purple-100';
-        textColor = 'text-purple-800';
-    } else {
-        status = 'Hazardous';
-        bgColor = 'bg-gray-100';
-        textColor = 'text-gray-800';
-    }
-    
-    const statusElement = document.getElementById(`${location}-air-quality-status`);
-    if (statusElement) {
-        statusElement.textContent = status;
-        statusElement.className = `inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${bgColor} ${textColor}`;
-    }
-}
-
-// Helper function to format timestamp
-function formatTimestamp(date) {
-    return date.toLocaleString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        month: 'short',
-        day: 'numeric'
-    });
-}
-
-// Helper function to get time ago
-function getTimeAgo(date) {
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
-}
-
-// Update location specific data
-function updateLocationData(data) {
-    // Sort data by location
-    const location1Data = data.filter(reading => reading.location === 'Makhmor Road');
-    const location2Data = data.filter(reading => reading.location === 'Namaz Area');
-    
-    // Update Location 1 (Makhmor Road)
-    if (location1Data.length > 0) {
-        const latestL1 = location1Data[0];
-        document.getElementById('location1-name').textContent = 'Makhmor Road';
-        document.getElementById('location1-pm25').textContent = `${latestL1.pm25.toFixed(1)} μg/m³`;
-        document.getElementById('location1-timestamp').textContent = formatTimestamp(latestL1.timestamp);
-    }
-    
-    // Update Location 2 (Namaz Area)
-    if (location2Data.length > 0) {
-        const latestL2 = location2Data[0];
-        document.getElementById('location2-name').textContent = 'Namaz Area';
-        document.getElementById('location2-pm25').textContent = `${latestL2.pm25.toFixed(1)} μg/m³`;
-        document.getElementById('location2-timestamp').textContent = formatTimestamp(latestL2.timestamp);
-    }
-
-    // Update map markers if the map is initialized
-    if (typeof window.updateMapMarkers === 'function') {
-        const locations = [
-            { lat: 35.7749, lng: 43.5883, name: 'Makhmor Road', reading: location1Data[0] },
-            { lat: 36.1901, lng: 44.0091, name: 'Namaz Area', reading: location2Data[0] }
-        ];
-        window.updateMapMarkers(locations);
-    }
-}
-
-// Format date and time
-function formatDateTime(date) {
-    if (!(date instanceof Date)) {
-        // Try to convert to date if it's not already a Date object
-        try {
-            date = new Date(date);
-        } catch (e) {
-            console.error('Failed to parse date:', date);
-            return 'Invalid Date';
-        }
-    }
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-        console.error('Invalid date:', date);
-        return 'Invalid Date';
-    }
-    
-    try {
-        return date.toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (e) {
-        console.error('Error formatting date:', e);
-        return date.toString();
-    }
-}
-
-// Update time ago text
-function updateTimeAgo(timestamp) {
-    if (!(timestamp instanceof Date)) {
-        try {
-            timestamp = new Date(timestamp);
-        } catch (e) {
-            console.error('Failed to parse timestamp:', timestamp);
-            timeAgoElement.textContent = 'Unknown';
-            return;
-        }
-    }
-    
-    if (isNaN(timestamp.getTime())) {
-        console.error('Invalid timestamp:', timestamp);
-        timeAgoElement.textContent = 'Unknown';
-        return;
-    }
-    
-    const now = new Date();
-    const diff = now - timestamp;
-    
-    let timeAgo = '';
-    if (diff < 60 * 1000) {
-        timeAgo = 'Just now';
-    } else if (diff < 60 * 60 * 1000) {
-        const minutes = Math.floor(diff / (60 * 1000));
-        timeAgo = `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    } else if (diff < 24 * 60 * 60 * 1000) {
-        const hours = Math.floor(diff / (60 * 60 * 1000));
-        timeAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else {
-        const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-        timeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
-    }
-    
-    timeAgoElement.textContent = timeAgo;
-}
-
-// Update data table
-function updateDataTable() {
-    console.log('Updating data table');
-    
-    let filteredData = [...allReadings];
-    
-    // Apply location filter
-    const locationFilter = locationFilterElement.value;
-    if (locationFilter === 'location1') {
-        filteredData = location1Data;
-    } else if (locationFilter === 'location2') {
-        filteredData = location2Data;
-    }
-    
-    // Ensure data is properly formatted
-    filteredData = filteredData.map(reading => {
-        const timestamp = reading.timestamp instanceof Date ? 
-            reading.timestamp : new Date(reading.timestamp);
-        
-        const pm25 = parseFloat(reading.pm25);
-        
-        return {
-            ...reading,
-            timestamp: isNaN(timestamp.getTime()) ? new Date() : timestamp,
-            pm25: isNaN(pm25) ? 0 : pm25
-        };
-    });
-    
-    console.log('Filtered data for table:', filteredData.length);
-    
-    // Pagination
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = Math.min(startIndex + itemsPerPage, filteredData.length);
-    const paginatedData = filteredData.slice(startIndex, endIndex);
-    
-    // Update page info
-    pageInfoElement.textContent = `Showing ${startIndex + 1}-${endIndex} of ${filteredData.length}`;
-    
-    // Enable/disable pagination buttons
-    prevPageButton.disabled = currentPage === 1;
-    prevPageButton.classList.toggle('opacity-50', currentPage === 1);
-    nextPageButton.disabled = endIndex >= filteredData.length;
-    nextPageButton.classList.toggle('opacity-50', endIndex >= filteredData.length);
-    
-    // Clear existing content
-    if (readingsTableBody) {
-        readingsTableBody.innerHTML = '';
-    } else {
-        console.warn('readingsTableBody element not found');
-    }
-    
-    // Update cards for mobile
-    const readingsCards = document.getElementById('readings-cards');
-    if (readingsCards) {
-        readingsCards.innerHTML = '';
-    } else {
-        console.warn('readingsCards element not found');
-    }
-    
-    if (paginatedData.length === 0) {
-        if (readingsTableBody) {
-            const emptyRow = document.createElement('tr');
-            emptyRow.innerHTML = `
-                <td colspan="5" class="px-6 py-4 text-sm text-center text-gray-500">No data available</td>
-            `;
-            readingsTableBody.appendChild(emptyRow);
-        }
-        
-        if (readingsCards) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'text-center text-gray-500 py-4';
-            emptyMessage.textContent = 'No data available';
-            readingsCards.appendChild(emptyMessage);
-        }
-        
-        return;
-    }
-    
-    paginatedData.forEach((reading) => {
-        // Get status information
-        const statusInfo = getStatusInfo(reading.pm25);
-        
-        // Create table row for desktop
-        if (readingsTableBody) {
-            const row = document.createElement('tr');
-            row.classList.add('hover:bg-slate-750');
-            
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${reading.id}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">${reading.pm25.toFixed(1)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${formatDateTime(reading.timestamp)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${reading.location}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                    <span class="inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}">
-                        ${statusInfo.status}
-                    </span>
-                </td>
-            `;
-            
-            readingsTableBody.appendChild(row);
-        }
-        
-        // Create card for mobile
-        if (readingsCards) {
-            const card = document.createElement('div');
-            card.className = 'neo-card p-4 hover-lift';
-            
-            card.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <span class="text-xs text-gray-400">ID: ${reading.id}</span>
-                        <div class="mt-1 flex items-center">
-                            <span class="text-xl font-bold text-gray-800">${reading.pm25.toFixed(1)}</span>
-                            <span class="ml-1 text-sm text-gray-500">μg/m³</span>
-                        </div>
-                    </div>
-                    <span class="inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}">
-                        ${statusInfo.status}
-                    </span>
-                </div>
-                <div class="flex justify-between text-xs">
-                    <span class="text-gray-500">${formatDateTime(reading.timestamp)}</span>
-                    <span class="text-gray-600">${simplifyLocation(reading.location)}</span>
-                </div>
-            `;
-            
-            readingsCards.appendChild(card);
-        }
-    });
-}
-
-// Helper function to get status info based on PM2.5 value
-function getStatusInfo(pm25) {
-    let status = '';
-    let bgColor = '';
-    let textColor = '';
-    
-    if (pm25 <= 12) {
-        status = 'Good';
-        bgColor = 'bg-green-500/30';
-        textColor = 'text-green-700';
-    } else if (pm25 <= 35.4) {
-        status = 'Moderate';
-        bgColor = 'bg-yellow-500/30';
-        textColor = 'text-yellow-700';
-    } else if (pm25 <= 55.4) {
-        status = 'USG';
-        bgColor = 'bg-orange-500/30';
-        textColor = 'text-orange-700';
-    } else if (pm25 <= 150.4) {
-        status = 'Unhealthy';
-        bgColor = 'bg-red-500/30';
-        textColor = 'text-red-700';
-    } else if (pm25 <= 250.4) {
-        status = 'Very Unhealthy';
-        bgColor = 'bg-purple-500/30';
-        textColor = 'text-purple-700';
-    } else {
-        status = 'Hazardous';
-        bgColor = 'bg-red-600/30';
-        textColor = 'text-red-800';
-    }
-    
-    return {
-        status,
-        bgColor,
-        textColor
-    };
-}
-
-// Helper function to simplify location names for mobile view
-function simplifyLocation(location) {
-    if (location.includes('Makhmor')) {
-        return 'Makhmor Rd';
-    } else if (location.includes('namaz')) {
-        return 'Namaz Area';
-    }
-    return location;
-}
-
 // Update charts with the latest data
-function updateCharts(data) {
+function updateCharts(processedData) {
     console.log('Updating charts with time range:', currentTimeRange);
+
+    if (!mainChart) {
+        console.error('Main chart is not initialized. Cannot update.');
+        return;
+    }
+
     const now = new Date();
     const timeLimit = timeRanges[currentTimeRange];
-    
-    // Filter data based on time range
-    const filteredLocation1Data = data.filter(reading => {
-        const readingTime = new Date(reading.timestamp);
-        return (now - readingTime) <= timeLimit;
-    }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    const filteredLocation2Data = data.filter(reading => {
-        const readingTime = new Date(reading.timestamp);
-        return (now - readingTime) <= timeLimit;
-    }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    console.log(`Filtered data - Location 1: ${filteredLocation1Data.length}, Location 2: ${filteredLocation2Data.length}`);
-    
-    if (mainChart) {
-        // Update datasets
-        mainChart.data.datasets[0].data = filteredLocation1Data.map(reading => ({
-            x: new Date(reading.timestamp),
-            y: reading.pm25
-        }));
-        
-        mainChart.data.datasets[1].data = filteredLocation2Data.map(reading => ({
-            x: new Date(reading.timestamp),
-            y: reading.pm25
-        }));
-        
-        // Update chart
-        mainChart.update();
-    } else {
-        console.error('Main chart not initialized');
+
+    // Filter data for the current time range AND ensure timestamp is valid
+    const filterAndMapData = (dataArray) => {
+        return (dataArray || []) // Handle null or undefined array
+            .filter(reading => reading.timestamp instanceof Date && !isNaN(reading.timestamp) && (now - reading.timestamp) <= timeLimit)
+            .sort((a, b) => a.timestamp - b.timestamp) // Sort chronologically
+            .map(reading => ({
+                x: reading.timestamp,
+                y: reading.pm25 !== null ? parseFloat(reading.pm25) : null // Handle null PM2.5
+            }));
+    };
+
+    // Prepare chart data using the processed data passed as argument
+    const chartDataMakhmor = filterAndMapData(processedData['makhmor-road']);
+    const chartDataNaznaz = filterAndMapData(processedData['naznaz-area']); // Use correct ID
+
+    console.log(`Chart points - Makhmor Road: ${chartDataMakhmor.length}, Naznaz Area: ${chartDataNaznaz.length}`);
+
+    // Update main chart datasets
+    mainChart.data.datasets[0].data = chartDataMakhmor; // Makhmor Road (index 0)
+    mainChart.data.datasets[1].data = chartDataNaznaz; // Naznaz Area (index 1)
+    mainChart.data.datasets[1].label = 'Naznaz Area'; // Ensure label is correct
+
+    // Dynamically adjust time unit based on range
+    let timeUnit = 'hour';
+    let stepSize = 2; // Default step for hours
+    if (currentTimeRange === '7d') {
+        timeUnit = 'day';
+        stepSize = 1;
+    } else if (currentTimeRange === '30d') {
+        timeUnit = 'day';
+        stepSize = 3; // Show roughly every 3 days
     }
+    mainChart.options.scales.x.time.unit = timeUnit;
+    mainChart.options.scales.x.time.stepSize = stepSize;
+
+
+    // Update the chart
+    mainChart.update(); // Efficiently updates the chart
+
+    // Update individual location charts if they exist
+    // if (location1Chart) { /* update location1Chart */ }
+    // if (naznazChart) { /* update naznazChart */ }
 }
+
 
 // Function to set time range
 function setTimeRange(range) {
     console.log('Setting time range to:', range);
-    
-    // Update button states
-    const timeRangeButtons = document.querySelectorAll('.time-range-btn');
-    timeRangeButtons.forEach(btn => {
-        btn.classList.remove('bg-orange-500', 'text-white');
-        btn.classList.add('bg-gray-100', 'text-gray-600');
-    });
-    
-    // Set active button
-    const activeButton = document.querySelector(`[data-range="${range}"]`);
-    if (activeButton) {
-        activeButton.classList.remove('bg-gray-100', 'text-gray-600');
-        activeButton.classList.add('bg-orange-500', 'text-white');
-    }
-    
-    // Update current time range
-    currentTimeRange = range;
-    
-    // Update chart configuration based on time range
-    if (mainChart) {
-        const timeUnit = range === '24h' ? 'hour' : 'day';
-        mainChart.options.scales.x.time.unit = timeUnit;
-        
-        // Set display formats based on range
-        switch (range) {
-            case '24h':
-                mainChart.options.scales.x.time.displayFormats = {
-                    hour: 'HH:mm'
-                };
-                break;
-            case '7d':
-            case '30d':
-                mainChart.options.scales.x.time.displayFormats = {
-                    day: 'MMM D'
-                };
-                break;
+
+    // Update button states visually
+    document.querySelectorAll('.time-range-btn').forEach(btn => {
+        const btnRange = btn.getAttribute('data-range');
+        if (btnRange === range) {
+            btn.classList.remove('bg-gray-100', 'text-gray-600');
+            btn.classList.add('bg-orange-500', 'text-white', 'shadow-md'); // Active style
+        } else {
+            btn.classList.remove('bg-orange-500', 'text-white', 'shadow-md');
+            btn.classList.add('bg-gray-100', 'text-gray-600'); // Inactive style
         }
-        
-        // Update chart data for the new time range
-        refreshData().catch(error => {
-            console.error('Error refreshing data after time range change:', error);
-            showError('Failed to update chart with new time range: ' + error.message);
-        });
-    }
+    });
+
+    // Update current time range state
+    currentTimeRange = range;
+
+    // Trigger data refresh and chart update for the new range
+    // No need to manually update chart options here, refreshData->updateCharts handles it
+    refreshData().catch(error => {
+        console.error('Error refreshing data after time range change:', error);
+        showError('Failed to update data for new time range: ' + error.message);
+    });
 }
 
 // Setup event listeners
@@ -1237,8 +938,10 @@ function setupEventListeners() {
     document.querySelectorAll('.time-range-btn').forEach(button => {
         button.addEventListener('click', () => {
             const range = button.getAttribute('data-range');
-            console.log(`${range} button clicked`);
-            setTimeRange(range);
+            if (range) { // Ensure data-range attribute exists
+                 console.log(`${range} button clicked`);
+                 setTimeRange(range);
+            }
         });
     });
 
@@ -1247,148 +950,288 @@ function setupEventListeners() {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
             const refreshIcon = refreshBtn.querySelector('svg');
-            if (refreshIcon) refreshIcon.classList.add('animate-spin');
-            
+            if (refreshIcon) {
+                 refreshIcon.classList.add('animate-spin');
+                 refreshBtn.disabled = true; // Disable button while refreshing
+            }
+            console.log("Refresh button clicked");
             try {
                 await refreshData();
-                console.log('Data refreshed successfully');
+                console.log('Data refreshed successfully via button');
             } catch (error) {
-                console.error('Error refreshing data:', error);
+                console.error('Error refreshing data via button:', error);
                 showError('Failed to refresh data: ' + error.message);
             } finally {
                 if (refreshIcon) {
-                setTimeout(() => {
+                    // Ensure animation stops and button is re-enabled
+                    setTimeout(() => {
                         refreshIcon.classList.remove('animate-spin');
-                }, 500);
+                        refreshBtn.disabled = false;
+                    }, 500); // Small delay to ensure animation shows
+                } else {
+                    refreshBtn.disabled = false;
                 }
             }
         });
+    } else {
+        console.warn("Refresh button not found.");
     }
-    
-    // Location filter
+
+    // Location filter dropdown
     if (locationFilterElement) {
         locationFilterElement.addEventListener('change', () => {
-            currentPage = 1;
+            currentPage = 1; // Reset to first page on filter change
             updateDataTable();
         });
+    } else {
+         console.warn("Location filter dropdown not found.");
     }
-    
+
     // Pagination buttons
-    if (prevPageButton && nextPageButton) {
-    prevPageButton.addEventListener('click', () => {
-        if (currentPage > 1) {
-            currentPage--;
-            updateDataTable();
-        }
-    });
-    
-    nextPageButton.addEventListener('click', () => {
-        const totalPages = Math.ceil(allReadings.length / itemsPerPage);
-        if (currentPage < totalPages) {
-            currentPage++;
-            updateDataTable();
-        }
-    });
+    if (prevPageButton) {
+        prevPageButton.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updateDataTable();
+            }
+        });
+    } else {
+         console.warn("Previous page button not found.");
+    }
+
+    if (nextPageButton) {
+        nextPageButton.addEventListener('click', () => {
+             // Calculate total pages based on the currently filtered data length
+             let filteredDataLength = allReadings.length;
+             const locationFilter = locationFilterElement ? locationFilterElement.value : 'all';
+             if (locationFilter === 'makhmor-road') {
+                 filteredDataLength = makhmorRoadData.length;
+             } else if (locationFilter === 'naznaz-area') {
+                 filteredDataLength = naznazAreaData.length;
+             }
+            const totalPages = Math.ceil(filteredDataLength / itemsPerPage);
+
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateDataTable();
+            }
+        });
+    } else {
+         console.warn("Next page button not found.");
     }
 }
 
-// Initialize everything when the page loads
-document.addEventListener('DOMContentLoaded', async function() {
+// Update data table/cards view
+function updateDataTable() {
+    console.log('Updating data table/cards for page:', currentPage);
+
+    let dataToDisplay = [];
+    const locationFilter = locationFilterElement ? locationFilterElement.value : 'all';
+
+    // Select the correct data source based on the filter
+    if (locationFilter === 'makhmor-road') {
+        dataToDisplay = makhmorRoadData; // Use pre-filtered Makhmor data
+    } else if (locationFilter === 'naznaz-area') {
+        dataToDisplay = naznazAreaData; // Use pre-filtered Naznaz data
+    } else {
+        dataToDisplay = allReadings; // Use all readings (already sorted newest first)
+    }
+
+    const totalItems = dataToDisplay.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    currentPage = Math.max(1, Math.min(currentPage, totalPages)); // Ensure currentPage is valid
+
+    // Pagination calculation
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+    const paginatedData = dataToDisplay.slice(startIndex, endIndex);
+
+    // Update page info display
+    if (pageInfoElement) {
+        pageInfoElement.textContent = totalItems > 0 ? `Showing ${startIndex + 1}-${endIndex} of ${totalItems}` : 'Showing 0-0 of 0';
+    }
+
+    // Enable/disable pagination buttons
+    if (prevPageButton) {
+        prevPageButton.disabled = currentPage === 1;
+        prevPageButton.classList.toggle('opacity-50', currentPage === 1);
+        prevPageButton.classList.toggle('cursor-not-allowed', currentPage === 1);
+    }
+    if (nextPageButton) {
+        nextPageButton.disabled = currentPage >= totalPages;
+        nextPageButton.classList.toggle('opacity-50', currentPage >= totalPages);
+        nextPageButton.classList.toggle('cursor-not-allowed', currentPage >= totalPages);
+    }
+
+    // Clear existing content
+    if (readingsTableBody) readingsTableBody.innerHTML = '';
+    if (readingsCards) readingsCards.innerHTML = '';
+
+    // Handle case where there's no data to display for the current filter/page
+    if (paginatedData.length === 0) {
+        const emptyMessage = 'No data available for this filter.';
+        if (readingsTableBody) {
+            readingsTableBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-sm text-center text-gray-500">${emptyMessage}</td></tr>`;
+        }
+        if (readingsCards) {
+            readingsCards.innerHTML = `<div class="text-center text-gray-500 py-4">${emptyMessage}</div>`;
+        }
+        return; // Stop here if no data
+    }
+
+    // Populate table (desktop) and cards (mobile)
+    paginatedData.forEach((reading) => {
+        const pm25 = reading.pm25 !== null ? parseFloat(reading.pm25) : null;
+        const timestamp = reading.timestamp; // Should be a Date object
+        const locationId = locationMapping[reading.Location]; // Get internal ID
+        const displayName = locationId === 'makhmor-road' ? 'Makhmor Road' : 'Naznaz Area';
+        const shortDisplayName = locationId === 'makhmor-road' ? 'Makhmor Rd' : 'Naznaz Area';
+        const statusInfo = getAirQualityStatus(pm25); // Use the helper
+
+        // Create table row (Desktop)
+        if (readingsTableBody) {
+            const row = document.createElement('tr');
+            row.classList.add('hover:bg-gray-50'); // Lighter hover for white background
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${reading.id}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium ${pm25 !== null && pm25 > 55.4 ? 'text-red-600' : 'text-gray-900'}">${pm25 !== null ? pm25.toFixed(1) : '--'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timestamp instanceof Date && !isNaN(timestamp) ? formatDateTime(timestamp) : 'Invalid Date'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span class="inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}">
+                        ${statusInfo.status}
+                    </span>
+                </td>
+            `;
+            readingsTableBody.appendChild(row);
+        }
+
+        // Create card (Mobile) - Using neo-card style from index.html
+        if (readingsCards) {
+            const card = document.createElement('div');
+            // Apply similar classes as used in index.html for consistency
+            card.className = 'neo-card bg-white rounded-lg shadow p-4 mb-3'; // Simplified classes
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <span class="text-xs text-gray-400">ID: ${reading.id}</span>
+                        <div class="mt-1 flex items-center">
+                            <span class="text-xl font-bold ${pm25 !== null && pm25 > 55.4 ? 'text-red-600' : 'text-gray-800'}">${pm25 !== null ? pm25.toFixed(1) : '--'}</span>
+                            <span class="ml-1 text-sm text-gray-500">μg/m³</span>
+                        </div>
+                    </div>
+                    <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}">
+                        ${statusInfo.status}
+                    </span>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>${timestamp instanceof Date && !isNaN(timestamp) ? formatDateTime(timestamp) : 'Invalid Date'}</span>
+                    <span class="font-medium">${shortDisplayName}</span>
+                </div>
+            `;
+            readingsCards.appendChild(card);
+        }
+    });
+}
+
+
+// Helper function to format timestamp for display in table/cards
+function formatDateTime(date) {
+    if (!(date instanceof Date) || isNaN(date)) return 'Invalid Date';
     try {
-        console.log('Starting dashboard initialization...');
-        
-        // Initialize dashboard (this will handle Supabase initialization)
-        await initDashboard();
-        
-    } catch (error) {
-        console.error('Error during initialization:', error);
-        showError('Failed to initialize application: ' + error.message);
+        // Example format: Apr 22, 2025, 7:30 PM
+        return date.toLocaleString([], {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+        });
+    } catch (e) {
+        console.error('Error formatting date:', e);
+        return date.toString(); // Fallback
     }
-});
-
-function createMarker(location, reading) {
-    const pm25Value = reading ? parseFloat(reading.pm25) : null;
-    const status = getPM25Status(pm25Value);
-    
-    const customIcon = L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div class="marker-pin" style="background-color: ${status.color};">
-                <span class="marker-text">${pm25Value ? pm25Value.toFixed(1) : '--'}</span>
-              </div>`,
-        iconSize: [30, 42],
-        iconAnchor: [15, 42],
-        popupAnchor: [0, -35]
-    });
-    
-    const marker = L.marker([location.lat, location.lng], { icon: customIcon });
-    const popupContent = createPopupContent(location, reading);
-    marker.bindPopup(popupContent);
-    return marker;
 }
 
-function createPopupContent(location, reading) {
-    if (!reading) {
-        return '<div class="popup-content"><p>No data available</p></div>';
-    }
-    
-    const pm25Value = parseFloat(reading.pm25);
-    const timestamp = new Date(reading.timestamp).toLocaleString();
-    const status = getPM25Status(pm25Value);
-    
-    return `
-        <div class="popup-content">
-            <h3 class="font-bold mb-2">${reading.location}</h3>
-            <div class="pm25-value" style="color: ${status.color}">
-                <span class="text-lg font-bold">${pm25Value.toFixed(1)}</span> μg/m³
-            </div>
-            <div class="text-sm text-gray-600 mt-2">Status: ${status.text}</div>
-            <div class="text-xs text-gray-500 mt-1">Last updated: ${timestamp}</div>
-        </div>
-    `;
+// Helper function to get time ago string
+function getTimeAgo(date) {
+    if (!(date instanceof Date) || isNaN(date)) return 'Invalid date';
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+
+    if (seconds < 5) return 'Just now'; // More immediate feedback
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-// Function to update averages display
+
+// Function to update averages display section (uses global `averages`)
 function updateAveragesDisplay() {
-    ['location1', 'location2'].forEach(location => {
+    ['makhmor-road', 'naznaz-area'].forEach(locationId => {
+        const detailPrefix = locationId === 'makhmor-road' ? 'location1' : 'naznaz'; // Use consistent prefix
         Object.keys(timeRanges).forEach(range => {
-            const avgData = averages[location][range];
-            const elementId = `${location}-${range}-avg`;
+            const avgData = averages[locationId] ? averages[locationId][range] : { pm25: 0, humidity: 0 };
+            const elementId = `${detailPrefix}-${range}-avg`; // e.g., location1-24h-avg, naznaz-7d-avg
             const element = document.getElementById(elementId);
             if (element) {
-                element.textContent = `PM2.5: ${avgData.pm25.toFixed(1)} μg/m³ | Humidity: ${avgData.humidity.toFixed(1)}%`;
+                // Display PM2.5 average. Add humidity if needed.
+                element.textContent = `${avgData.pm25.toFixed(1)} μg/m³`;
+                // Optional: Add humidity: element.textContent += ` | ${avgData.humidity.toFixed(1)}%`;
+            } else {
+                 console.warn(`Average display element not found: ${elementId}`);
             }
         });
     });
 }
 
-window.supabaseInitDashboard = async function() {
-    // Initialize Supabase client if not already initialized
-    const initialized = await initializeSupabase();
-    if (!initialized) {
-        showError('Failed to initialize Supabase client');
-        return false;
-    }
-    
-    // Refresh the dashboard data
-    const data = await refreshData();
-    return data && data.length > 0;
-};
-
-// Function to update predictions display
+// Function to update predictions display section (uses global `predictions`)
 function updatePredictionsDisplay() {
-    ['location1', 'location2'].forEach(location => {
-        const prediction = predictions[location];
-        const elementId = `${location}-prediction`;
-        const element = document.getElementById(elementId);
-        if (element && prediction.pm25 !== null) {
-            element.innerHTML = `
-                <div class="prediction-value">
-                    Predicted PM2.5: ${prediction.pm25.toFixed(1)} μg/m³
-                    <div class="confidence-indicator">
-                        Confidence: ${prediction.confidence.toFixed(1)}%
-                    </div>
-                </div>
-            `;
-        }
-    });
+     ['makhmor-road', 'naznaz-area'].forEach(locationId => {
+         const detailPrefix = locationId === 'makhmor-road' ? 'location1' : 'naznaz'; // Use consistent prefix
+         const prediction = predictions[locationId];
+         const elementId = `${detailPrefix}-prediction`; // e.g., location1-prediction, naznaz-prediction
+         const element = document.getElementById(elementId);
+         if (element) {
+             if (prediction && prediction.pm25 !== null) {
+                 element.innerHTML = `
+                    Predicted PM2.5: <span class="font-semibold">${prediction.pm25.toFixed(1)} μg/m³</span>
+                    <div class="text-xs text-blue-500 mt-1">Confidence: ${prediction.confidence ? prediction.confidence.toFixed(0) : '--'}%</div>
+                 `;
+             } else {
+                 element.textContent = 'Prediction unavailable';
+             }
+         } else {
+             console.warn(`Prediction display element not found: ${elementId}`);
+         }
+     });
 }
+
+
+// Initialize everything when the page loads
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('DOM fully loaded and parsed.');
+    // Use a try-catch block for the entire initialization sequence
+    try {
+        console.log('Starting dashboard initialization process...');
+        await initDashboard(); // Call the main initialization function
+    } catch (error) {
+        console.error('Critical error during initialization sequence:', error);
+        // Display a user-friendly error message in the UI if possible
+        const bodyElement = document.querySelector('body');
+        if (bodyElement) {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.position = 'fixed';
+            errorDiv.style.top = '0';
+            errorDiv.style.left = '0';
+            errorDiv.style.right = '0';
+            errorDiv.style.backgroundColor = '#ef4444'; // Red background
+            errorDiv.style.color = 'white';
+            errorDiv.style.padding = '10px';
+            errorDiv.style.textAlign = 'center';
+            errorDiv.style.zIndex = '1000';
+            errorDiv.textContent = `FATAL ERROR: Dashboard could not initialize. ${error.message}. Please check console and refresh.`;
+            bodyElement.prepend(errorDiv);
+        }
+        // Fallback error display
+        showError('FATAL ERROR: Dashboard could not initialize. Check console.');
+    }
+});

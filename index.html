@@ -4,1178 +4,289 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Air Quality Monitor</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Chart.js Adapter for date handling -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Leaflet for map functionality -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-    <!-- Custom scripts -->
-    <script src="db-config.js"></script>
-    <script src="init-db.js"></script>
-    <script src="config.js"></script>
-    <script src="sensor-status.js"></script>
-    <script src="app.js"></script>
-    <!-- Custom styles -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap');
-        
+
         :root {
             --orange-primary: #FF7A00;
             --orange-secondary: #FFB766;
-            --orange-accent: #FF5500;
+            --blue-primary: #3B82F6; /* Tailwind blue-500 */
+            --blue-secondary: #60A5FA; /* Tailwind blue-400 */
             --card-bg: #FFFFFF;
             --bg-primary: #F9FAFB;
             --text-primary: #2D3748;
             --text-secondary: #64748B;
         }
-        
+
         body {
             font-family: 'Manrope', sans-serif;
             background-color: var(--bg-primary);
             color: var(--text-primary);
-            background-image: 
-                radial-gradient(circle at 70% 20%, rgba(255, 122, 0, 0.03) 0%, transparent 70%),
-                radial-gradient(circle at 20% 80%, rgba(255, 184, 0, 0.03) 0%, transparent 70%);
-        }
-        
-        /* Map styles */
-        #air-quality-map {
-            height: 400px;
-            width: 100%;
-            border-radius: 12px;
-        }
-        
-        .location-area {
-            stroke: #333;
-            stroke-width: 1;
-            stroke-opacity: 0.5;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .location-area:hover {
-            stroke-width: 2;
-            stroke-opacity: 1;
-        }
-        
-        .location-popup .leaflet-popup-content-wrapper {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        }
-        
-        .location-popup .leaflet-popup-tip {
-            background-color: white;
-        }
-        
-        .location-popup-content {
-            padding: 8px;
-            font-family: 'Manrope', sans-serif;
-        }
-        
-        .location-popup-title {
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 4px;
-            color: var(--text-primary);
-        }
-        
-        .location-popup-value {
-            font-weight: 700;
-            font-size: 18px;
-            color: var(--orange-primary);
-        }
-        
-        .error-banner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background-color: rgba(0, 0, 0, 0);
-            color: white;
-            padding: 0;
-            z-index: 50;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.875rem;
-            transition: all 0.3s ease;
-            height: 0;
-            overflow: hidden;
-        }
-        
-        .error-banner:not(.hidden):not(:empty) {
-            background-color: #ef4444;
-            height: auto;
-            padding: 0.5rem 1rem;
-        }
-        
-        .error-banner.hidden {
-            transform: translateY(-100%);
-        }
-        
-        .neo-card {
-            background: var(--card-bg);
-            box-shadow: 
-                0 15px 30px rgba(0, 0, 0, 0.1),
-                0 5px 15px rgba(0, 0, 0, 0.05),
-                0 0 0 1px rgba(0, 0, 0, 0.02);
-            border-radius: 16px;
-            border: none;
-            position: relative;
-            overflow: hidden;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transform: translateY(0);
-            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                        box-shadow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            margin-top: 5px;
-            margin-bottom: 15px;
-        }
-        
-        .neo-card:hover {
-            box-shadow: 
-                0 30px 60px rgba(0, 0, 0, 0.12), 
-                0 15px 40px rgba(0, 0, 0, 0.06),
-                0 0 80px rgba(255, 122, 0, 0.15);
-            transform: translateY(-15px);
-            border: none;
-        }
-        
-        .neo-card::before {
-            display: none;
-        }
-        
-        @keyframes gradientBorder {
-            0% { background-position: 0% 0; }
-            100% { background-position: 200% 0; }
-        }
-        
-        .neo-card::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(
-                to bottom right,
-                rgba(255, 255, 255, 0.2) 0%,
-                rgba(255, 255, 255, 0.1) 50%,
-                transparent 100%
-            );
-            pointer-events: none;
-            transform: rotate(15deg);
-            z-index: 1;
-        }
-        
-        .hover-lift {
-            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        
-        .hover-lift:hover {
-            transform: translateY(-5px) scale(1.02);
-            box-shadow: 
-                0 20px 40px rgba(0, 0, 0, 0.06), 
-                0 0 80px rgba(255, 122, 0, 0.1),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.9);
-        }
-        
-        .floating-card {
-            box-shadow: 
-                0 20px 50px rgba(0, 0, 0, 0.1),
-                0 10px 30px rgba(0, 0, 0, 0.05),
-                0 0 0 1px rgba(0, 0, 0, 0.02);
-            transform: translateY(0);
-            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                        box-shadow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            margin-top: 5px;
-            margin-bottom: 15px;
-        }
-        
-        .floating-card:hover {
-            box-shadow: 
-                0 40px 80px rgba(0, 0, 0, 0.15),
-                0 20px 50px rgba(0, 0, 0, 0.08),
-                0 0 120px rgba(255, 122, 0, 0.15);
-            transform: translateY(-15px);
-        }
-        
-        .gradient-text {
-            background: linear-gradient(90deg, var(--orange-primary) 0%, var(--orange-secondary) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            position: relative;
-        }
-        
-        .gradient-bg {
-            background: linear-gradient(135deg, var(--orange-primary) 0%, var(--orange-secondary) 100%);
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.03);
-            border-radius: 4px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: var(--orange-primary);
-            border-radius: 4px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: var(--orange-secondary);
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        
-        .glow {
-            box-shadow: 0 0 15px rgba(255, 122, 0, 0.5);
-            position: relative;
-            z-index: 1;
-            overflow: hidden;
-        }
-        
-        .glow::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(120deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.3) 100%);
-            z-index: -1;
-            transition: all 0.3s ease;
-        }
-        
-        .glow:hover::after {
-            transform: translateX(100%);
-        }
-        
-        .animated-gradient-bg {
-            background: linear-gradient(-45deg, #FFFFFF, #F5F7FA, #FBFBFB, #F0F2F5);
-            background-size: 400% 400%;
-            animation: gradient 15s ease infinite;
-        }
-        
-        @keyframes gradient {
-            0% {
-                background-position: 0% 50%;
-            }
-            50% {
-                background-position: 100% 50%;
-            }
-            100% {
-                background-position: 0% 50%;
-            }
-        }
-        
-        .glass-effect {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-        }
-        
-        .orange-glow {
-            box-shadow: 0 0 20px rgba(255, 122, 0, 0.6);
-            position: relative;
-        }
-        
-        .orange-glow::before {
-            content: '';
-            position: absolute;
-            top: -5px;
-            left: -5px;
-            right: -5px;
-            bottom: -5px;
-            background: radial-gradient(circle at center, rgba(255, 122, 0, 0.4) 0%, transparent 70%);
-            border-radius: inherit;
-            z-index: -1;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.05); opacity: 0.5; }
-            100% { transform: scale(1); opacity: 0.8; }
-        }
-        
-        .shimmer {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .shimmer::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(
-                to right,
-                transparent 0%,
-                rgba(255, 255, 255, 0.7) 50%,
-                transparent 100%
-            );
-            animation: shimmer 3s infinite;
-            transform: skewX(-20deg);
-        }
-        
-        @keyframes shimmer {
-            0% { left: -100%; }
-            100% { left: 200%; }
-        }
-        
-        .ripple {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .ripple::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            transform: scale(0);
-            animation: ripple 2s infinite;
-            opacity: 0;
-        }
-        
-        @keyframes ripple {
-            0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(10); opacity: 0; }
-        }
-        
-        .dot-pattern {
-            position: relative;
-        }
-        
-        .dot-pattern::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-image: radial-gradient(rgba(255, 122, 0, 0.1) 1px, transparent 1px);
-            background-size: 20px 20px;
-            opacity: 0.3;
-            pointer-events: none;
-        }
-        
-        .grid-pattern {
-            background-size: 30px 30px;
             background-image:
-                linear-gradient(to right, rgba(255, 122, 0, 0.03) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 122, 0, 0.03) 1px, transparent 1px);
+                radial-gradient(circle at 70% 20%, rgba(255, 122, 0, 0.03) 0%, transparent 70%),
+                radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 70%); /* Added blue gradient */
         }
-        
-        /* Add clear visual separation between cards via margin */
-        .grid-cols-1 > div, 
-        .grid-cols-2 > div, 
-        .grid-cols-4 > div {
-            margin-bottom: 10px;
+
+        /* Map styles - Applied to both map divs */
+        .individual-map-container {
+            height: 350px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0;
         }
-        
-        /* Add drop shadow to emphasize floating effect */
-        .card-container {
-            position: relative;
-        }
-        
-        .card-container::after {
-            content: '';
-            position: absolute;
-            bottom: -15px;
-            left: 10%;
-            width: 80%;
-            height: 15px;
-            background: radial-gradient(ellipse at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 80%);
-            border-radius: 50%;
-            z-index: -1;
-            transition: opacity 0.5s ease;
-            opacity: 0.5;
-        }
-        
-        .card-container:hover::after {
-            opacity: 0.8;
-        }
+        .location-area { stroke-width: 1.5; stroke-opacity: 0.6; fillOpacity: 0.2; cursor: pointer; transition: all 0.3s ease; }
+        .location-area:hover { fillOpacity: 0.4; }
+        .location-popup .leaflet-popup-content-wrapper { background-color: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); padding: 8px 12px; }
+        .location-popup .leaflet-popup-tip { background-color: white; }
+        .location-popup-content { font-family: 'Manrope', sans-serif; min-width: 140px; text-align: left; }
+        .location-popup-title { font-weight: 600; font-size: 14px; margin-bottom: 5px; color: var(--text-primary); border-bottom: 1px solid #eee; padding-bottom: 3px; }
+        .location-popup-value { font-weight: 700; font-size: 17px; margin-bottom: 3px; }
+        .location-popup-status { font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; }
+        .location-popup-time { font-size: 0.75rem; color: #64748B; }
+
+        /* Error Banner Styling */
+        #error-message { position: fixed; top: 0; left: 0; right: 0; background-color: #ef4444; color: white; padding: 0.75rem 1rem; z-index: 1000; display: none; text-align: center; font-size: 0.875rem; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+        /* Card Styles */
+        .neo-card { background: var(--card-bg); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02); border-radius: 16px; border: none; position: relative; overflow: hidden; transform: translateY(0); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); margin-bottom: 15px; }
+        .neo-card:hover { box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08), 0 0 60px rgba(255, 122, 0, 0.08); transform: translateY(-8px); }
+        .hover-lift:hover { transform: translateY(-8px) scale(1.01); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08), 0 0 60px rgba(255, 122, 0, 0.08); }
+
+        /* Text & Background Gradients */
+        .gradient-text { background: linear-gradient(90deg, var(--orange-primary) 0%, var(--orange-secondary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-bg { background: linear-gradient(135deg, var(--orange-primary) 0%, var(--orange-secondary) 100%); }
+        /* *** ADDED BLUE GRADIENT CLASS *** */
+        .gradient-bg-blue { background: linear-gradient(135deg, var(--blue-primary) 0%, var(--blue-secondary) 100%); }
+
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--orange-primary); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--orange-secondary); }
+
+        /* Status Badge */
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+
+        /* Header Style */
+        .glass-effect { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.85); border-bottom: 1px solid rgba(230, 230, 230, 0.7); }
+        .animated-gradient-bg { background: linear-gradient(-45deg, #FFFFFF, #F5F7FA, #FEFEFE, #F0F2F5); background-size: 400% 400%; animation: gradientBG 20s ease infinite; }
+        @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .grid-pattern { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.02) 1px, transparent 1px); }
+        .shimmer { position: relative; overflow: hidden; background-color: #e2e8f0; }
+        .shimmer::after { content: ''; position: absolute; top: 0; left: -150%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent); animation: shimmer-animation 1.5s infinite; }
+        @keyframes shimmer-animation { 0% { left: -150%; } 100% { left: 150%; } }
+        .shimmer span, .shimmer p, .shimmer div { opacity: 0.5; }
     </style>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        orange: {
-                            450: '#FF7A00',
-                            350: '#FFB766',
-                        },
-                        slate: {
-                            750: '#E5E7EB',
-                            850: '#F8FAFC',
-                        },
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { orange: { primary: '#FF7A00', secondary: '#FFB766' }, blue: { primary: '#3B82F6', secondary: '#60A5FA' } } } } } // Added blue colors
     </script>
 </head>
 <body class="min-h-screen animated-gradient-bg custom-scrollbar grid-pattern">
-    <!-- Header -->
-    <header class="sticky top-0 z-10 glass-effect border-b border-gray-200 shadow-sm">
-        <div id="error-message" class="hidden bg-red-500 text-white px-4 py-2 text-sm"></div>
-        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center">
-                <div class="h-16 w-16 mr-3 flex-shrink-0 overflow-hidden bg-white p-1">
-                    <img src="images/Logo_of_Tishk_International_University.png" alt="Tishk International University Logo" class="h-full w-full object-contain">
-                </div>
-                <div>
-                    <h1 class="text-2xl font-bold gradient-text mb-0">AirQuality</h1>
-                    <p class="text-xs text-gray-500 -mt-1">Tishk International University</p>
-                </div>
-            </div>
-            <div class="flex items-center">
-                <div class="bg-white px-3 py-1.5 rounded-lg text-xs text-gray-600 hidden md:block shadow-sm border border-gray-100">
-                    <span id="current-time">Loading...</span>
-                </div>
-                <button id="refresh-btn" class="ml-3 p-2 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 shadow-sm glow">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                </button>
-            </div>
+    <div id="error-message"></div>
+
+    <header class="sticky top-0 z-40 glass-effect shadow-sm">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+             <div class="flex items-center space-x-3">
+                 <div class="h-12 w-12 flex-shrink-0 overflow-hidden bg-white p-1 rounded-md shadow-sm"> <img src="images/Logo_of_Tishk_International_University.png" alt="Tishk International University Logo" class="h-full w-full object-contain"> </div>
+                 <div> <h1 class="text-xl font-bold gradient-text mb-0">AirQuality</h1> <p class="text-xs text-gray-500 -mt-1">Tishk International University</p> </div>
+             </div>
+             <div class="flex items-center space-x-3">
+                 <div class="bg-white px-3 py-1.5 rounded-lg text-xs text-gray-600 hidden md:block shadow-sm border border-gray-100"> <span id="current-time">Loading...</span> </div>
+                 <button id="refresh-btn" class="p-2 rounded-lg bg-white hover:bg-gray-100 transition-colors duration-200 shadow-sm border border-gray-100" title="Refresh Data"> <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> </button>
+             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="container mx-auto px-4 py-8">
-        <!-- Page Intro -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Air Quality <span class="gradient-text">Monitor</span></h1>
-            <p class="text-gray-600">Real-time PM2.5 concentration data from monitoring stations in Kurdistan, Iraq</p>
+    <main class="container mx-auto px-4 py-6">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-1">Air Quality <span class="gradient-text">Monitor</span></h1>
+            <p class="text-gray-600">Real-time PM2.5 concentration data from monitoring stations in Erbil, Kurdistan Region</p>
         </div>
 
-        <!-- Overview Stats -->
-        <section class="mb-8">
-            <!-- Makhmor Road Sensor Dashboard -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Makhmor Road <span class="gradient-text">Sensor</span></h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <!-- Current PM2.5 Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3>
-                                <div class="h-8 w-8 rounded-full gradient-bg flex items-center justify-center orange-glow">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div class="flex items-end">
-                                <div class="mr-3">
-                                    <span id="makhmor-current-pm25" class="text-4xl font-bold gradient-text">--</span>
-                                    <span class="text-gray-500 ml-1">PM2.5</span>
-                                </div>
-                                <span id="makhmor-air-quality-status" class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-white text-gray-700 shadow-sm">
-                                    Loading...
-                                </span>
-                            </div>
-                            <div class="mt-4">
-                                <p id="makhmor-status-time" class="text-xs text-gray-500">Updating...</p>
-                            </div>
-                        </div>
+        <section class="mb-6">
+            <div class="mb-6">
+                 <h2 class="text-2xl font-semibold text-gray-800 mb-3">Makhmor Road <span class="gradient-text">Sensor</span></h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="neo-card hover-lift p-5">
+                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3><div class="h-8 w-8 rounded-full gradient-bg flex items-center justify-center text-white shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></div></div>
+                        <div class="flex items-baseline mb-1"><span id="makhmor-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
+                        <span id="makhmor-air-quality-status" class="status-badge bg-gray-100 text-gray-600">Loading...</span><p id="makhmor-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
                     </div>
-
-                    <!-- 24hr Average Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-350/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <div class="mr-3">
-                                    <span id="makhmor-average-pm25" class="text-4xl font-bold text-gray-800">--</span>
-                                    <span class="text-gray-500 ml-1">PM2.5</span>
-                                </div>
-                            </div>
-                            <div class="mt-4 flex justify-between items-center">
-                                <p class="text-xs text-gray-500">24 hour average</p>
-                                <div id="makhmor-avg-change" class="flex items-center text-xs font-medium text-green-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    0%
-                                </div>
-                            </div>
-                        </div>
+                    <div class="neo-card hover-lift p-5">
+                         <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-orange-secondary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                         <div class="flex items-baseline"><span id="makhmor-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div><p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
                     </div>
-
-                    <!-- Last Updated Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-450/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <p id="makhmor-last-updated" class="text-xl font-semibold text-gray-800">--</p>
-                            </div>
-                            <div class="mt-4">
-                                <p id="makhmor-time-ago" class="text-sm text-gray-500">Loading...</p>
-                            </div>
-                        </div>
+                    <div class="neo-card hover-lift p-5">
+                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-orange-primary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                        <p id="makhmor-last-updated" class="text-lg font-semibold text-gray-800">--</p><p id="makhmor-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
                     </div>
+                    <div class="neo-card hover-lift p-5">
+                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-orange-secondary/20 flex items-center justify-center text-orange-secondary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
+                        <span id="makhmor-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span><p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
+                    </div>
+                 </div>
+            </div>
+             <div class="mb-6">
+                 <h2 class="text-2xl font-semibold text-gray-800 mb-3">Naznaz Area <span class="gradient-text">Sensor</span></h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                     <div class="neo-card hover-lift p-5">
+                         <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3>
+                             <div class="h-8 w-8 rounded-full gradient-bg-blue flex items-center justify-center text-white shadow-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            </div>
+                         </div>
+                         <div class="flex items-baseline mb-1">
+                             <span id="naznaz-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span>
+                             <span class="text-sm text-gray-500">μg/m³</span>
+                         </div>
+                         <span id="naznaz-air-quality-status" class="status-badge bg-gray-100 text-gray-600">Loading...</span>
+                         <p id="naznaz-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
+                     </div>
+                     <div class="neo-card hover-lift p-5">
+                         <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                         <div class="flex items-baseline"><span id="naznaz-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div><p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
+                     </div>
+                     <div class="neo-card hover-lift p-5">
+                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                        <p id="naznaz-last-updated" class="text-lg font-semibold text-gray-800">--</p><p id="naznaz-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
+                    </div>
+                    <div class="neo-card hover-lift p-5">
+                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
+                        <span id="naznaz-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span><p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
+                    </div>
+                 </div>
+            </div>
+        </section>
 
-                    <!-- Sensor Status Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-350/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-350" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <span id="makhmor-sensor-status" class="text-xl font-bold text-gray-800">Offline</span>
-                            </div>
-                            <div class="mt-4">
-                                <p class="text-xs text-gray-500">Sensor connection status</p>
-                            </div>
-                        </div>
+        <section class="mb-6">
+             <div class="neo-card overflow-hidden">
+                <div class="flex flex-col md:flex-row md:items-center justify-between p-4 border-b border-gray-100">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-3 md:mb-0">PM2.5 Concentration <span class="gradient-text">Trends</span></h2>
+                    <div class="flex space-x-2">
+                        <button class="time-range-btn bg-orange-primary text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-sm" data-range="24h" id="btn-24h">24h</button>
+                        <button class="time-range-btn bg-gray-100 text-gray-600 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-200" data-range="7d" id="btn-7d">7d</button>
+                        <button class="time-range-btn bg-gray-100 text-gray-600 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-200" data-range="30d" id="btn-30d">30d</button>
                     </div>
                 </div>
+                <div class="p-4"><div class="h-80 relative"><canvas id="air-quality-chart"></canvas></div></div>
             </div>
+        </section>
 
-            <!-- Namaz Area Sensor Dashboard -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Namaz Area <span class="gradient-text">Sensor</span></h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <!-- Current PM2.5 Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3>
-                                <div class="h-8 w-8 rounded-full gradient-bg flex items-center justify-center orange-glow">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div class="flex items-end">
-                                <div class="mr-3">
-                                    <span id="namaz-current-pm25" class="text-4xl font-bold gradient-text">--</span>
-                                    <span class="text-gray-500 ml-1">PM2.5</span>
-                                </div>
-                                <span id="namaz-air-quality-status" class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-white text-gray-700 shadow-sm">
-                                    Loading...
-                                </span>
-                            </div>
-                            <div class="mt-4">
-                                <p id="namaz-status-time" class="text-xs text-gray-500">Updating...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 24hr Average Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-350/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <div class="mr-3">
-                                    <span id="namaz-average-pm25" class="text-4xl font-bold text-gray-800">--</span>
-                                    <span class="text-gray-500 ml-1">PM2.5</span>
-                                </div>
-                            </div>
-                            <div class="mt-4 flex justify-between items-center">
-                                <p class="text-xs text-gray-500">24 hour average</p>
-                                <div id="namaz-avg-change" class="flex items-center text-xs font-medium text-green-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    0%
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Last Updated Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-450/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-450" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <p id="namaz-last-updated" class="text-xl font-semibold text-gray-800">--</p>
-                            </div>
-                            <div class="mt-4">
-                                <p id="namaz-time-ago" class="text-sm text-gray-500">Loading...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sensor Status Card -->
-                    <div class="card-container">
-                        <div class="neo-card floating-card hover-lift p-6 shimmer">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3>
-                                <div class="h-8 w-8 rounded-full bg-orange-350/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-350" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <div>
-                                <span id="namaz-sensor-status" class="text-xl font-bold text-gray-800">Offline</span>
-                            </div>
-                            <div class="mt-4">
-                                <p class="text-xs text-gray-500">Sensor connection status</p>
-                            </div>
-                        </div>
-                    </div>
+        <section class="mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="neo-card overflow-hidden">
+                    <div class="p-4 border-b border-gray-100"> <h2 class="text-lg font-semibold text-gray-800">Makhmor Road <span class="gradient-text">Map</span></h2> </div>
+                    <div class="p-4"> <div id="makhmor-map" class="individual-map-container"></div> </div>
+                </div>
+                <div class="neo-card overflow-hidden">
+                     <div class="p-4 border-b border-gray-100"> <h2 class="text-lg font-semibold text-gray-800">Naznaz Area <span class="gradient-text">Map</span></h2> </div>
+                     <div class="p-4"> <div id="naznaz-map" class="individual-map-container"></div> </div>
                 </div>
             </div>
         </section>
 
-        
-        <section class="mb-8">
-            <div class="card-container">
-                <div class="neo-card floating-card overflow-hidden">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-gray-200">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4 md:mb-0">PM2.5 Concentration <span class="gradient-text">Trends</span></h2>
-                        <div class="flex space-x-2 mb-4">
-                            <button 
-                                class="time-range-btn bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium" 
-                                data-range="24h"
-                                id="btn-24h"
-                            >24h</button>
-                            <button 
-                                class="time-range-btn bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium" 
-                                data-range="7d"
-                                id="btn-7d"
-                            >7d</button>
-                            <button 
-                                class="time-range-btn bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium" 
-                                data-range="30d"
-                                id="btn-30d"
-                            >30d</button>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <div class="h-80">
-                            <canvas id="air-quality-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-       
-
-        <!-- Detailed Section -->
-        <section class="mb-8">
-            <div class="card-container">
-                <div class="neo-card floating-card overflow-hidden">
-                    <div class="p-6 border-b border-gray-200">
-                        <div class="flex items-center justify-between">
-                            <h2 class="text-lg font-bold text-gray-800">Air Quality <span class="gradient-text">Map</span></h2>
-                            <div class="flex items-center space-x-2">
-                                <span class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-orange-450/30 text-orange-600">
-                                    <span class="w-2 h-2 mr-1 rounded-full bg-orange-600"></span>
-                                    Location 1
-                                </span>
-                                <span class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-blue-400/30 text-blue-600">
-                                    <span class="w-2 h-2 mr-1 rounded-full bg-blue-600"></span>
-                                    Location 2
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="p-6">
-                        <div id="air-quality-map"></div>
-                        <div class="mt-6">
-                            <h3 class="text-lg font-semibold mb-4">Recent Updates</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <!-- Location 1 Recent Updates -->
-                                <div class="neo-card p-4">
-                                    <div class="flex items-center space-x-2 mb-3">
-                                        <span class="w-2 h-2 rounded-full bg-orange-600"></span>
-                                        <h4 class="font-medium">Location 1 Updates</h4>
-                                    </div>
-                                    <div id="location1-updates" class="space-y-2">
-                                        <!-- Recent updates will be inserted here -->
-                                        <div class="text-sm text-gray-500">Loading updates...</div>
-                                    </div>
-                                </div>
-                                <!-- Location 2 Recent Updates -->
-                                <div class="neo-card p-4">
-                                    <div class="flex items-center space-x-2 mb-3">
-                                        <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                                        <h4 class="font-medium">Location 2 Updates</h4>
-                                    </div>
-                                    <div id="location2-updates" class="space-y-2">
-                                        <!-- Recent updates will be inserted here -->
-                                        <div class="text-sm text-gray-500">Loading updates...</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <section class="mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="neo-card p-5">
+                     <div class="flex justify-between items-start mb-3"><div><h3 class="text-lg font-semibold text-gray-800" id="location1-name">Makhmor Road</h3><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div></div><p class="text-sm text-gray-500" id="location1-timestamp">--:--</p></div>
+                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4><div class="grid grid-cols-3 gap-2 text-center"><div><span class="block text-sm font-semibold text-gray-700" id="location1-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div><div><span class="block text-sm font-semibold text-gray-700" id="location1-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div><div><span class="block text-sm font-semibold text-gray-700" id="location1-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div></div></div>
+                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4><div id="location1-prediction" class="text-sm text-blue-600">Loading...</div></div>
+                 </div>
+                 <div class="neo-card p-5">
+                     <div class="flex justify-between items-start mb-3"><div><h3 class="text-lg font-semibold text-gray-800" id="naznaz-name">Naznaz Area</h3><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div></div><p class="text-sm text-gray-500" id="naznaz-timestamp">--:--</p></div>
+                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4><div class="grid grid-cols-3 gap-2 text-center"><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div></div></div>
+                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4><div id="naznaz-prediction" class="text-sm text-blue-600">Loading...</div></div>
+                 </div>
             </div>
         </section>
 
-        <!-- Table Section -->
-        <section>
-            <div class="card-container">
-                <div class="neo-card floating-card overflow-hidden">
-                    <!-- Commenting out Recent Readings Section
-                    <div class="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-gray-200">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4 md:mb-0">Recent Readings</h2>
-                        <div class="flex items-center">
-                            <span class="text-sm text-gray-500 mr-2">Filter by:</span>
-                            <select id="location-filter" class="bg-white text-gray-700 border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-450 shadow-sm">
-                                <option value="all">All Locations</option>
-                                <option value="location1">Location 1</option>
-                                <option value="location2">Location 2</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div id="readings-cards" class="p-4 space-y-4 md:hidden">
-                        <div class="text-center text-gray-500 py-4">Loading data...</div>
-                    </div>
-                    
-                    <div class="hidden md:block overflow-x-auto custom-scrollbar">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PM2.5</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="readings-table-body" class="divide-y divide-gray-200 bg-white">
-                                <tr>
-                                    <td colspan="5" class="px-6 py-4 text-sm text-center text-gray-500">Loading data...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="flex items-center justify-between p-6 bg-gray-50">
-                        <span id="page-info" class="text-sm text-gray-500">Showing 0-0 of 0</span>
-                        <div class="flex space-x-2">
-                            <button id="prev-page" class="flex items-center justify-center px-4 py-2 text-xs font-medium bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                                </svg>
-                                Previous
-                            </button>
-                            <button id="next-page" class="flex items-center justify-center px-4 py-2 text-xs font-medium rounded-lg gradient-bg text-white disabled:opacity-50 orange-glow">
-                                Next
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    -->
-                </div>
-            </div>
-        </section>
+        </main>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- Location 1 Card -->
-            <div class="neo-card p-6">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-800" id="location1-name">Makhmor Road</h3>
-                        <div class="flex items-center mt-2">
-                            <span class="text-2xl font-bold text-gray-800" id="location1-pm25">-- μg/m³</span>
-                            <span class="ml-2 text-sm text-gray-500">PM2.5</span>
-                        </div>
-                        <div class="flex items-center mt-2">
-                            <span class="text-2xl font-bold text-gray-800" id="location1-humidity">--%</span>
-                            <span class="ml-2 text-sm text-gray-500">Humidity</span>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm text-gray-500" id="location1-timestamp">--:--</p>
-                    </div>
-                </div>
-                
-                <!-- Averages Section -->
-                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Averages</h4>
-                    <div class="space-y-2">
-                        <div class="text-sm">
-                            <span class="text-gray-600">24h:</span>
-                            <span id="location1-24h-avg" class="ml-2">--</span>
-                        </div>
-                        <div class="text-sm">
-                            <span class="text-gray-600">7d:</span>
-                            <span id="location1-7d-avg" class="ml-2">--</span>
-                        </div>
-                        <div class="text-sm">
-                            <span class="text-gray-600">30d:</span>
-                            <span id="location1-30d-avg" class="ml-2">--</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Prediction Section -->
-                <div class="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h4 class="text-sm font-semibold text-blue-700 mb-2">24h Prediction</h4>
-                    <div id="location1-prediction" class="text-sm text-blue-600">
-                        Loading prediction...
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <canvas id="location1-chart" height="100"></canvas>
-                </div>
-            </div>
-
-            <!-- Location 2 Card -->
-            <div class="neo-card p-6">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-800" id="location2-name">Namaz Area</h3>
-                        <div class="flex items-center mt-2">
-                            <span class="text-2xl font-bold text-gray-800" id="location2-pm25">-- μg/m³</span>
-                            <span class="ml-2 text-sm text-gray-500">PM2.5</span>
-                        </div>
-                        <div class="flex items-center mt-2">
-                            <span class="text-2xl font-bold text-gray-800" id="location2-humidity">--%</span>
-                            <span class="ml-2 text-sm text-gray-500">Humidity</span>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm text-gray-500" id="location2-timestamp">--:--</p>
-                    </div>
-                </div>
-
-                <!-- Averages Section -->
-                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Averages</h4>
-                    <div class="space-y-2">
-                        <div class="text-sm">
-                            <span class="text-gray-600">24h:</span>
-                            <span id="location2-24h-avg" class="ml-2">--</span>
-                        </div>
-                        <div class="text-sm">
-                            <span class="text-gray-600">7d:</span>
-                            <span id="location2-7d-avg" class="ml-2">--</span>
-                        </div>
-                        <div class="text-sm">
-                            <span class="text-gray-600">30d:</span>
-                            <span id="location2-30d-avg" class="ml-2">--</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Prediction Section -->
-                <div class="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h4 class="text-sm font-semibold text-blue-700 mb-2">24h Prediction</h4>
-                    <div id="location2-prediction" class="text-sm text-blue-600">
-                        Loading prediction...
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <canvas id="location2-chart" height="100"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Chart Section -->
-        <div class="neo-card p-6 mb-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-gray-800">Air Quality Trends</h3>
-                <div class="flex space-x-2">
-                    <button id="toggle-pm25" class="px-3 py-1 text-sm rounded-full bg-orange-500 text-white">PM2.5</button>
-                    <button id="toggle-humidity" class="px-3 py-1 text-sm rounded-full bg-blue-500 text-white">Humidity</button>
-                </div>
-            </div>
-            <div class="h-96">
-                <canvas id="air-quality-chart"></canvas>
-            </div>
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-200 mt-12 shadow-sm">
-        <div class="container mx-auto px-4 py-6">
-            <div class="text-center">
-                <div class="text-sm text-gray-500">
-                    &copy; 2025 Air Quality Monitoring System
-                </div>
-            </div>
+    <footer class="bg-white border-t border-gray-100 mt-8 shadow-sm">
+        <div class="container mx-auto px-4 py-5 text-center">
+            <p class="text-sm text-gray-500">&copy; 2025 Air Quality Monitoring System - Tishk International University</p>
         </div>
     </footer>
 
-    <!-- JavaScript for Firebase and data handling -->
-    <script>
-        // Display current time
-        function updateCurrentTime() {
-            const now = new Date();
-            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-            document.getElementById('current-time').textContent = now.toLocaleDateString('en-US', options);
-        }
-        
-        updateCurrentTime();
-        setInterval(updateCurrentTime, 60000);
-    </script>
     <script src="db-config.js"></script>
     <script src="sensor-status.js"></script>
     <script src="app.js"></script>
-    
-    <!-- Map initialization script -->
+
     <script>
-        // Map configuration
-        const locations = {
-            location1: {
-                name: "Location 1",
-                center: [36.1675, 44.0120], // Example coordinates - replace with actual
-                color: "#FF7A00",
-                id: "location1",
-                // Area polygon - replace with actual area boundaries
-                polygon: [
-                    [36.131336, 43.955878],
-                    [36.127069, 43.935050],
-                    [36.112558, 43.928211],
-                    [36.092654, 43.936422],
-                    [36.087244, 43.967664],
-                    [36.095914, 43.982169],
-                    [36.118589, 43.990409],
-                    [36.133590, 43.986449],
-                    [36.136186, 43.971241]
-                ]
-            },
-            location2: {
-                name: "Location 2",
-                center: [36.1825, 44.0220], // Example coordinates - replace with actual
-                color: "#3B82F6",
-                id: "location2",
-                // Area polygon - replace with actual area boundaries
-                polygon: [
-                    [36.195884, 43.993956],
-                    [36.200586, 43.975506],
-                    [36.202055, 43.961425],
-                    [36.216648, 43.970165],
-                    [36.222622, 43.994927],
-                    [36.218776, 44.011252],
-                    [36.203788, 44.013599]
-                ]
-            }
+        // --- LEAFLET MAP INITIALIZATION FOR TWO MAPS ---
+        let maps = { makhmor: null, naznaz: null };
+        const mapMarkers = { makhmor: null, naznaz: null };
+        const mapLocations = {
+            makhmor: { name: "Makhmor Road", center: [36.112146, 43.953925], color: "#FF7A00", id: "makhmor-road", mapDivId: "makhmor-map", polygon: [[36.131336, 43.955878],[36.127069, 43.935050],[36.112558, 43.928211],[36.092654, 43.936422],[36.087244, 43.967664],[36.095914, 43.982169],[36.118589, 43.990409],[36.133590, 43.986449],[36.136186, 43.971241]] },
+            naznaz: { name: "Naznaz Area", center: [36.213724, 43.988080], color: "#3B82F6", id: "naznaz-area", mapDivId: "naznaz-map", polygon: [[36.195884, 43.993956],[36.200586, 43.975506],[36.202055, 43.961425],[36.216648, 43.970165],[36.222622, 43.994927],[36.218776, 44.011252],[36.203788, 44.013599]] }
         };
 
-        // Initialize map
-        const map = L.map('air-quality-map').setView([36.1750, 44.0170], 13); // Center between the two locations
-
-        // Add OpenStreetMap tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // Add location areas to map
-        Object.values(locations).forEach(location => {
-            // Create polygon for the location area
-            const polygon = L.polygon(location.polygon, {
-                color: location.color,
-                fillColor: location.color,
-                fillOpacity: 0.4,
-                className: 'location-area'
-            }).addTo(map);
-
-            // Add popup with PM2.5 data
-            polygon.bindPopup(createPopupContent(location), {
-                className: 'location-popup'
+        function initMaps() {
+            Object.entries(mapLocations).forEach(([key, location]) => {
+                try {
+                    const mapDiv = document.getElementById(location.mapDivId); if (!mapDiv) { console.error(`Map container '${location.mapDivId}' not found.`); return; }
+                    maps[key] = L.map(location.mapDivId).setView(location.center, 12);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(maps[key]);
+                    const polygon = L.polygon(location.polygon, { color: location.color, weight: 1.5, fillColor: location.color, fillOpacity: 0.2, className: 'location-area' }).addTo(maps[key]);
+                    location.polygonRef = polygon;
+                    const marker = createOrUpdateMarker(location, null); mapMarkers[key] = marker; marker.addTo(maps[key]);
+                    marker.bindPopup(() => createPopupContentForMap(location), { className: 'location-popup', offset: [0, -30] });
+                    console.log(`${location.name} map initialized.`);
+                } catch (error) {
+                    console.error(`Error initializing ${location.name} map:`, error);
+                    const mapDiv = document.getElementById(location.mapDivId); if (mapDiv) mapDiv.innerHTML = `<p class="text-center text-red-500 p-4">Error loading map: ${error.message}</p>`;
+                }
             });
-
-            // Store the polygon reference for later updates
-            location.polygonRef = polygon;
-        });
-
-        // Function to create popup content
-        function createPopupContent(location) {
-            const popup = L.DomUtil.create('div', 'location-popup-content');
-            
-            // Remove the title (location name) - we don't need this anymore
-            // const title = L.DomUtil.create('div', 'location-popup-title', popup);
-            // title.textContent = location.name;
-            
-            // Just show the PM2.5 value prominently
-            const value = L.DomUtil.create('div', 'location-popup-value', popup);
-            const pm25Element = document.getElementById(`${location.id}-pm25`);
-            // Extract the number from the text content (removing the PM2.5 part)
-            const pm25Text = pm25Element.textContent;
-            const pm25Value = pm25Text.replace(' PM2.5', '');
-            value.textContent = pm25Value + ' PM2.5';
-            
-            // Still show the timestamp
-            const timestamp = L.DomUtil.create('div', 'text-xs text-gray-500', popup);
-            const timestampValue = document.getElementById(`${location.id}-timestamp`).textContent;
-            timestamp.textContent = `Last updated: ${timestampValue}`;
-            
-            return popup;
         }
 
-        // Update map popups when PM2.5 data changes
+        function createOrUpdateMarker(location, reading) {
+             const pm25Value = (reading && reading.pm25 !== null) ? parseFloat(reading.pm25) : null; const status = getAirQualityStatus(pm25Value);
+             const iconHtml = `<div style="background-color: ${status.color}; border: 1px solid rgba(0,0,0,0.2);" class="w-8 h-8 rounded-full flex items-center justify-center shadow-lg"><span class="text-white font-bold text-xs">${pm25Value !== null ? pm25Value.toFixed(0) : '--'}</span></div><div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid ${status.color}; margin: auto; position: relative; top: -1px;"></div>`;
+             const customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [32, 40], iconAnchor: [16, 40] });
+             const mapKey = location.id === 'makhmor-road' ? 'makhmor' : 'naznaz'; const marker = mapMarkers[mapKey];
+             if (marker) { marker.setIcon(customIcon); return marker; } else { return L.marker(location.center, { icon: customIcon }); }
+         }
+
+         function createPopupContentForMap(location) {
+             const internalId = location.id; const reading = internalId === 'makhmor-road' ? (makhmorRoadData.length > 0 ? makhmorRoadData[0] : null) : (naznazAreaData.length > 0 ? naznazAreaData[0] : null);
+             const popup = L.DomUtil.create('div', 'location-popup-content'); const title = L.DomUtil.create('div', 'location-popup-title', popup); title.textContent = location.name;
+             if (!reading) { L.DomUtil.create('div', 'text-sm text-gray-500 mt-1', popup).textContent = 'No current data.'; return popup; }
+             const pm25Value = reading.pm25 !== null ? parseFloat(reading.pm25) : null; const timestamp = reading.timestamp instanceof Date ? reading.timestamp : new Date(reading.timestamp); const status = getAirQualityStatus(pm25Value);
+             const value = L.DomUtil.create('div', 'location-popup-value', popup); value.style.color = status.color; value.textContent = pm25Value !== null ? `${pm25Value.toFixed(1)} μg/m³` : '-- μg/m³';
+             const statusText = L.DomUtil.create('div', 'location-popup-status', popup); statusText.textContent = `Status: ${status.status}`;
+             const timestampDiv = L.DomUtil.create('div', 'location-popup-time', popup);
+             if (timestamp instanceof Date && !isNaN(timestamp)) { timestampDiv.textContent = `Updated: ${getTimeAgo(timestamp)}`; } else { timestampDiv.textContent = 'Updated: Invalid time'; }
+             return popup;
+         }
+
         function updateMapData() {
-            Object.values(locations).forEach(location => {
-                if (location.polygonRef) {
-                    const pm25Value = document.getElementById(`${location.id}-pm25`).textContent;
-                    const timestampValue = document.getElementById(`${location.id}-timestamp`).textContent;
-                    
-                    // Update popup content
-                    if (location.polygonRef.isPopupOpen()) {
-                        location.polygonRef.setPopupContent(createPopupContent(location));
-                    }
-                    
-                    // Update polygon color based on PM2.5 value (optional)
-                    updatePolygonColor(location);
-                }
-            });
+             console.log("Attempting to update map markers...");
+             Object.entries(mapLocations).forEach(([key, location]) => {
+                 const mapInstance = maps[key]; const markerInstance = mapMarkers[key]; const internalId = location.id;
+                 if (!mapInstance || !markerInstance) { console.warn(`Map or marker instance not found for ${key}. Skipping update.`); return; }
+                 const latestReading = internalId === 'makhmor-road' ? (makhmorRoadData.length > 0 ? makhmorRoadData[0] : null) : (naznazAreaData.length > 0 ? naznazAreaData[0] : null);
+                 createOrUpdateMarker(location, latestReading);
+                 if (markerInstance.isPopupOpen()) { markerInstance.setPopupContent(createPopupContentForMap(location)); }
+             });
+             console.log("Map markers updated.");
         }
-
-        // Update polygon color based on PM2.5 value
-        function updatePolygonColor(location) {
-            const pm25Element = document.getElementById(`${location.id}-pm25`);
-            const pm25Text = pm25Element.textContent;
-            // Extract the number from the text with regex
-            const match = pm25Text.match(/^([\d.]+)/);
-            let pm25Value = 0;
-            
-            if (match && match[1]) {
-                pm25Value = parseFloat(match[1]);
-            }
-            
-            if (!isNaN(pm25Value)) {
-                let fillOpacity = 0.4;
-                
-                // Increase opacity for higher values (adjust thresholds as needed)
-                if (pm25Value > 100) {
-                    fillOpacity = 0.8;
-                } else if (pm25Value > 50) {
-                    fillOpacity = 0.6;
-                }
-                
-                location.polygonRef.setStyle({
-                    fillOpacity: fillOpacity
-                });
-            }
-        }
-
-        // Make the updateMapData function accessible globally
         window.updateMapData = updateMapData;
 
-        // Allow users to set custom locations (can be expanded with a UI)
-        function setLocationArea(locationId, newPolygon) {
-            if (locations[locationId] && locations[locationId].polygonRef) {
-                // Remove old polygon
-                map.removeLayer(locations[locationId].polygonRef);
-                
-                // Create new polygon
-                locations[locationId].polygon = newPolygon;
-                locations[locationId].polygonRef = L.polygon(newPolygon, {
-                    color: locations[locationId].color,
-                    fillColor: locations[locationId].color,
-                    fillOpacity: 0.4,
-                    className: 'location-area'
-                }).addTo(map);
-                
-                // Add popup with PM2.5 data
-                locations[locationId].polygonRef.bindPopup(createPopupContent(locations[locationId]), {
-                    className: 'location-popup'
-                });
-            }
+        if (typeof L !== 'undefined') { initMaps(); } else {
+            console.error("Leaflet library not loaded. Maps cannot be initialized.");
+            document.getElementById('makhmor-map').innerHTML = '<p class="text-center text-red-500 p-4">Error loading map library.</p>';
+            document.getElementById('naznaz-map').innerHTML = '<p class="text-center text-red-500 p-4">Error loading map library.</p>';
         }
-
-        // Make the setLocationArea function accessible globally
-        window.setLocationArea = setLocationArea;
-        
-        // Function to center the map on both location polygons
-        function centerMapOnLocations() {
-            try {
-                // Get the bounds of location1
-                const bounds1 = locations.location1.polygonRef.getBounds();
-                
-                // Get the bounds of location2
-                const bounds2 = locations.location2.polygonRef.getBounds();
-                
-                // Create a new bounds that contains both locations
-                const bounds = L.latLngBounds(bounds1.getSouthWest(), bounds1.getNorthEast());
-                bounds.extend(bounds2);
-                
-                // Fit the map to these bounds with some padding
-                map.fitBounds(bounds, {
-                    padding: [50, 50],
-                    maxZoom: 13
-                });
-                
-                console.log('Map centered on both locations');
-            } catch (error) {
-                console.error('Error centering map:', error);
-                // Fallback to default center if there's an error
-                map.setView([36.1750, 44.0170], 13);
-            }
-        }
-        
-        // Make the function accessible globally
-        window.centerMapOnLocations = centerMapOnLocations;
-        
-        // Initial center after map is ready
-        setTimeout(centerMapOnLocations, 500);
     </script>
+
+     <script>
+        function updateCurrentTime() { const timeElement = document.getElementById('current-time'); if (timeElement) { const now = new Date(); const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }; timeElement.textContent = now.toLocaleString('en-US', options); } }
+        updateCurrentTime(); setInterval(updateCurrentTime, 60000);
+    </script>
+
 </body>
 </html>
