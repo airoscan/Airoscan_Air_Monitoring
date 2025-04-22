@@ -159,196 +159,286 @@ const currentTimeElement = document.getElementById('current-time');
 // Function to refresh dashboard data
 async function refreshData() {
     try {
-        console.log('Refreshing dashboard data...');
+        // Check if dbConfig exists and is properly initialized
+        if (!window.dbConfig) {
+            throw new Error('Database configuration not found. Please reload the page.');
+        }
+
+        // Check if we have an API key
+        if (!window.dbConfig.supabaseKey) {
+            const error = new Error('No API key found. Please set your Supabase API key in the configuration.');
+            error.type = 'CONFIG_ERROR';
+            throw error;
+        }
+
+        // Ensure client is initialized
+        if (!window.dbConfig.client) {
+            const success = window.dbConfig.initClient();
+            if (!success) {
+                throw new Error('Failed to initialize Supabase client. Please check your API key.');
+            }
+        }
+
+        console.log('Starting data refresh...');
         
-        // Fetch the latest readings from Supabase
-        const readings = await fetchLatestReadings();
-        
+        // Fetch latest readings
+        const { data: readings, error } = await window.dbConfig.client
+            .from(window.dbConfig.airQualityTable)
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            throw new Error(`Database query failed: ${error.message}`);
+        }
+
         if (!readings || readings.length === 0) {
-            console.warn('No readings found in the database');
-            showError('No data available. Please check database connection.');
-            return [];
+            console.warn('No readings found in database');
+            updateDefaultValues();
+            return;
         }
-        
-        // Process the readings
-        console.log(`Processing ${readings.length} readings`);
-        
-        // Update globals
-        allReadings = readings;
-        
-        // Split data by location
-        location1Data = readings.filter(reading => reading.location === 'Makhmor Road');
-        location2Data = readings.filter(reading => reading.location === 'Namaz Area');
-        
-        // Calculate averages and predictions
-        if (location1Data.length > 0) {
-            averages.location1 = calculateAverages(location1Data);
-            predictions.location1 = predictPM25Levels(location1Data);
+
+        console.log(`Fetched ${readings.length} readings`);
+
+        // Location mapping
+        const locationMapping = {
+            '36.213724, 43.988080': 'makhmor-road',
+            '36.112146, 43.953925': 'namaz-area'
+        };
+
+        // Process readings by location
+        const readingsByLocation = {};
+        readings.forEach(reading => {
+            // Get location from the Location column
+            const location = reading.Location;
+            if (!location) {
+                console.warn('Reading found without location:', reading);
+                return;
+            }
+
+            // Map the coordinate to the correct location ID
+            const locationId = locationMapping[location];
+            if (!locationId) {
+                console.warn(`Unknown location coordinates: ${location}`);
+                return;
+            }
             
-            // Update location 1 UI elements
-            updateLocationDisplay('Makhmor Road', location1Data[0]);
+            if (!readingsByLocation[locationId]) {
+                readingsByLocation[locationId] = [];
+            }
+            readingsByLocation[locationId].push(reading);
+        });
+
+        console.log('Processed readings by location:', Object.keys(readingsByLocation));
+
+        // Update displays for each location
+        for (const [locationId, locationReadings] of Object.entries(readingsByLocation)) {
+            if (locationReadings.length > 0) {
+                const latestReading = locationReadings[0];
+                updateLocationDisplay(locationId, latestReading);
+                
+                // Calculate and update averages
+                if (locationReadings.length >= 24) {
+                    const averages = calculateAverages(locationReadings);
+                    updateAverageDisplay(locationId, averages);
+                }
+            }
         }
-        
-        if (location2Data.length > 0) {
-            averages.location2 = calculateAverages(location2Data);
-            predictions.location2 = predictPM25Levels(location2Data);
-            
-            // Update location 2 UI elements
-            updateLocationDisplay('Namaz Area', location2Data[0]);
+
+        // Ensure both locations are updated even if no data
+        const allLocations = ['makhmor-road', 'namaz-area'];
+        allLocations.forEach(locationId => {
+            if (!readingsByLocation[locationId]) {
+                updateLocationDisplay(locationId, null);
+            }
+        });
+
+        // Update charts if available
+        if (typeof updateCharts === 'function') {
+            updateCharts(readings);
         }
+
+        console.log('Data refresh completed successfully');
         
-        // Update UI components
-        updateCharts();
-        updateDataTable();
-        
-        // Update map if available
-        if (typeof window.updateMapMarkers === 'function') {
-            const locations = [
-                { lat: 35.7749, lng: 43.5883, name: 'Makhmor Road', reading: location1Data[0] },
-                { lat: 36.1901, lng: 44.0091, name: 'Namaz Area', reading: location2Data[0] }
-            ];
-            window.updateMapMarkers(locations);
-        }
-        
-        // Display success message in console
-        console.log('Dashboard data refreshed successfully');
-        
-        return readings;
     } catch (error) {
-        console.error('Error refreshing data:', error);
-        showError(`Failed to refresh data: ${error.message}`);
-        return [];
+        console.error('Error in refreshData:', error);
+        
+        // Handle configuration errors specially
+        if (error.type === 'CONFIG_ERROR') {
+            showError(error.message);
+            // Redirect to configuration page if available
+            if (typeof showConfigModal === 'function') {
+                showConfigModal();
+            }
+        } else {
+            showError('Failed to refresh data. Please check the console for details.');
+        }
+        
+        // Set default values for UI elements
+        updateDefaultValues();
     }
+}
+
+// Helper function to update UI with default values
+function updateDefaultValues() {
+    const locations = ['makhmor-road', 'namaz-area'];
+    locations.forEach(locationId => {
+        updateLocationDisplay(locationId, null);
+    });
 }
 
 // Function to update a location's display elements
-function updateLocationDisplay(locationName, reading) {
-    if (!reading) return;
+function updateLocationDisplay(location, reading) {
+    const prefix = location.toLowerCase().includes('makhmor') ? 'makhmor' : 'namaz';
     
+    if (!reading) {
+        console.warn(`No reading provided for ${location}`);
+        updateDefaultValues(prefix);
+        return;
+    }
+
     try {
-        const locationId = locationName.toLowerCase().replace(/\s+/g, '-');
-        
-        // Update PM2.5 value and status
-        const pm25Element = document.getElementById(`${locationId}-current-pm25`);
+        // Update PM2.5 value
+        const pm25Element = document.getElementById(`${prefix}-current-pm25`);
         if (pm25Element) {
-            pm25Element.textContent = reading.pm25.toFixed(1);
+            pm25Element.textContent = reading.pm25 ? reading.pm25.toFixed(1) : '--';
+            console.log(`Updated PM2.5 value for ${location} to ${reading.pm25 ? reading.pm25.toFixed(1) : '--'}`);
         }
-        
-        // Update air quality status based on PM2.5 value
-        updateAirQualityStatus(reading.pm25, locationId);
-        
-        // Update last updated timestamp
-        const statusTimeElement = document.getElementById(`${locationId}-status-time`);
-        if (statusTimeElement) {
-            const formattedTime = formatDateTime(reading.timestamp);
-            statusTimeElement.textContent = `Last updated: ${formattedTime}`;
+
+        // Update air quality status
+        const qualityStatusElement = document.getElementById(`${prefix}-air-quality-status`);
+        if (qualityStatusElement) {
+            const { status, bgColor, textColor } = getAirQualityStatus(reading.pm25);
+            qualityStatusElement.textContent = status;
+            qualityStatusElement.className = `px-3 py-1 rounded-full ${bgColor} ${textColor}`;
+            console.log(`Updated air quality status for ${location} to ${status}`);
         }
+
+        // Update timestamp
+        const timeElement = document.getElementById(`${prefix}-status-time`);
+        const lastUpdatedElement = document.getElementById(`${prefix}-last-updated`);
+        const timeAgoElement = document.getElementById(`${prefix}-time-ago`);
         
-        // Update main location data elements
-        const nameElement = document.getElementById(`${locationId.replace('-', '')}-name`);
-        if (nameElement) {
-            nameElement.textContent = locationName;
-        }
-        
-        const pm25ValueElement = document.getElementById(`${locationId.replace('-', '')}-pm25`);
-        if (pm25ValueElement) {
-            pm25ValueElement.textContent = `${reading.pm25.toFixed(1)} μg/m³`;
-        }
-        
-        const humidityElement = document.getElementById(`${locationId.replace('-', '')}-humidity`);
-        if (humidityElement && reading.humidity !== undefined) {
-            humidityElement.textContent = `${reading.humidity.toFixed(1)}%`;
-        }
-        
-        const timestampElement = document.getElementById(`${locationId.replace('-', '')}-timestamp`);
-        if (timestampElement) {
-            timestampElement.textContent = formatDateTime(reading.timestamp);
-        }
-        
-        // Update averages display
-        Object.keys(timeRanges).forEach(range => {
-            const avgElement = document.getElementById(`${locationId.replace('-', '')}-${range}-avg`);
-            if (avgElement && averages[locationId.replace('-', '')] && averages[locationId.replace('-', '')][range]) {
-                const avgData = averages[locationId.replace('-', '')][range];
-                avgElement.textContent = `PM2.5: ${avgData.pm25.toFixed(1)} μg/m³ | Humidity: ${avgData.humidity.toFixed(1)}%`;
+        if (reading.timestamp) {
+            const timestamp = new Date(reading.timestamp);
+            if (timeElement) {
+                timeElement.textContent = timestamp.toLocaleTimeString();
             }
-        });
+            if (lastUpdatedElement) {
+                lastUpdatedElement.textContent = `Last updated: ${timestamp.toLocaleString()}`;
+            }
+            if (timeAgoElement) {
+                const timeAgo = Math.floor((Date.now() - timestamp) / 1000 / 60);
+                timeAgoElement.textContent = `${timeAgo} minutes ago`;
+            }
+            console.log(`Updated timestamp elements for ${location}`);
+        }
+
+        // Update 24-hour average
+        const avgElement = document.getElementById(`${prefix}-average-pm25`);
+        const avgChangeElement = document.getElementById(`${prefix}-avg-change`);
         
-        // Update predictions if available
-        const predictionElement = document.getElementById(`${locationId.replace('-', '')}-prediction`);
-        if (predictionElement && predictions[locationId.replace('-', '')] && predictions[locationId.replace('-', '')].pm25 !== null) {
-            const prediction = predictions[locationId.replace('-', '')];
-            predictionElement.innerHTML = `
-                <div class="prediction-value">
-                    Predicted PM2.5: ${prediction.pm25.toFixed(1)} μg/m³
-                    <div class="confidence-indicator">
-                        Confidence: ${prediction.confidence.toFixed(1)}%
-                    </div>
-                </div>
-            `;
+        if (avgElement && reading.average24h) {
+            avgElement.textContent = reading.average24h.toFixed(1);
+        }
+        
+        if (avgChangeElement && reading.averageChange) {
+            const changePercent = (reading.averageChange * 100).toFixed(1);
+            const arrow = reading.averageChange > 0 ? '↑' : '↓';
+            avgChangeElement.textContent = `${arrow} ${Math.abs(changePercent)}%`;
+            avgChangeElement.className = reading.averageChange > 0 
+                ? 'text-red-600' 
+                : 'text-green-600';
+        }
+
+        // Update sensor status
+        const sensorStatusElement = document.getElementById(`${prefix}-sensor-status`);
+        if (sensorStatusElement) {
+            const timestamp = new Date(reading.timestamp);
+            const isOffline = Date.now() - timestamp > 6 * 60 * 60 * 1000; // 6 hours
+            sensorStatusElement.textContent = isOffline ? 'Offline' : 'Online';
+            sensorStatusElement.className = isOffline 
+                ? 'px-3 py-1 rounded-full bg-red-100 text-red-800'
+                : 'px-3 py-1 rounded-full bg-green-100 text-green-800';
+            console.log(`Updated sensor status for ${location} to ${isOffline ? 'Offline' : 'Online'}`);
         }
     } catch (error) {
-        console.error(`Error updating ${locationName} display:`, error);
+        console.error(`Error updating display for ${location}:`, error);
+        updateDefaultValues(prefix);
     }
 }
 
-// Function to set default values when no data is available
-function updateDefaultValues(locationId) {
-    try {
-        // Convert dash-style ID to no-dash style if needed
-        const dashStyle = locationId.includes('-') ? locationId : locationId.replace(/([A-Z])/g, '-$1').toLowerCase();
-        const noDashStyle = locationId.includes('-') ? locationId.replace(/-/g, '') : locationId;
-        
-        // Set PM2.5 to '--'
-        const pm25Element = document.getElementById(`${dashStyle}-current-pm25`);
-        if (pm25Element) {
-            pm25Element.textContent = '--';
-        }
-        
-        // Set status to 'Unknown'
-        const statusElement = document.getElementById(`${dashStyle}-air-quality-status`);
-        if (statusElement) {
-            statusElement.textContent = 'Unknown';
-            statusElement.className = 'inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800';
-        }
-        
-        // Set last updated to '--'
-        const statusTimeElement = document.getElementById(`${dashStyle}-status-time`);
-        if (statusTimeElement) {
-            statusTimeElement.textContent = 'No data available';
-        }
-        
-        // Update main elements
-        const pm25ValueElement = document.getElementById(`${noDashStyle}-pm25`);
-        if (pm25ValueElement) {
-            pm25ValueElement.textContent = '-- μg/m³';
-        }
-        
-        const humidityElement = document.getElementById(`${noDashStyle}-humidity`);
-        if (humidityElement) {
-            humidityElement.textContent = '--%';
-        }
-        
-        const timestampElement = document.getElementById(`${noDashStyle}-timestamp`);
-        if (timestampElement) {
-            timestampElement.textContent = '--:--';
-        }
-        
-        // Clear averages
-        Object.keys(timeRanges).forEach(range => {
-            const avgElement = document.getElementById(`${noDashStyle}-${range}-avg`);
-            if (avgElement) {
-                avgElement.textContent = '--';
+function updateDefaultValues(prefix) {
+    const elements = {
+        [`${prefix}-current-pm25`]: '--',
+        [`${prefix}-air-quality-status`]: 'No Data',
+        [`${prefix}-status-time`]: '--:--',
+        [`${prefix}-last-updated`]: 'Last updated: Unknown',
+        [`${prefix}-time-ago`]: '--',
+        [`${prefix}-average-pm25`]: '--',
+        [`${prefix}-avg-change`]: '--',
+        [`${prefix}-sensor-status`]: 'Unknown'
+    };
+
+    Object.entries(elements).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+            // Reset classes for status elements
+            if (id.includes('air-quality-status')) {
+                element.className = 'px-3 py-1 rounded-full bg-gray-100 text-gray-600';
+            } else if (id.includes('sensor-status')) {
+                element.className = 'px-3 py-1 rounded-full bg-gray-100 text-gray-600';
             }
-        });
-        
-        // Clear prediction
-        const predictionElement = document.getElementById(`${noDashStyle}-prediction`);
-        if (predictionElement) {
-            predictionElement.textContent = 'Not enough data for prediction';
         }
-    } catch (error) {
-        console.error(`Error setting default values for ${locationId}:`, error);
+    });
+}
+
+function getAirQualityStatus(pm25) {
+    if (pm25 === undefined || pm25 === null) {
+        return {
+            status: 'No Data',
+            bgColor: 'bg-gray-100',
+            textColor: 'text-gray-600'
+        };
+    }
+
+    if (pm25 <= 12) {
+        return {
+            status: 'Good',
+            bgColor: 'bg-green-100',
+            textColor: 'text-green-800'
+        };
+    } else if (pm25 <= 35.4) {
+        return {
+            status: 'Moderate',
+            bgColor: 'bg-yellow-100',
+            textColor: 'text-yellow-800'
+        };
+    } else if (pm25 <= 55.4) {
+        return {
+            status: 'Unhealthy for Sensitive Groups',
+            bgColor: 'bg-orange-100',
+            textColor: 'text-orange-800'
+        };
+    } else if (pm25 <= 150.4) {
+        return {
+            status: 'Unhealthy',
+            bgColor: 'bg-red-100',
+            textColor: 'text-red-800'
+        };
+    } else if (pm25 <= 250.4) {
+        return {
+            status: 'Very Unhealthy',
+            bgColor: 'bg-purple-100',
+            textColor: 'text-purple-800'
+        };
+    } else {
+        return {
+            status: 'Hazardous',
+            bgColor: 'bg-red-900',
+            textColor: 'text-white'
+        };
     }
 }
 
@@ -364,16 +454,17 @@ async function initializeSupabase() {
             throw new Error('Supabase API key not found. Please set your API key first.');
         }
 
-        // Initialize the client
-        if (!window.dbConfig.client) {
-            const initialized = window.dbConfig.initClient();
-            if (!initialized) {
-                throw new Error('Failed to initialize Supabase client');
-            }
+        // Initialize the client if not already initialized
+        if (!window.dbConfig.supabase) {
+            const supabase = window.supabase.createClient(
+                window.dbConfig.supabaseUrl,
+                window.dbConfig.supabaseKey
+            );
+            window.dbConfig.supabase = supabase;
         }
 
         // Test the connection
-        const { data, error } = await window.dbConfig.client
+        const { data, error } = await window.dbConfig.supabase
             .from(window.dbConfig.airQualityTable)
             .select('id')
             .limit(1);
@@ -393,12 +484,12 @@ async function initializeSupabase() {
 
 async function fetchLatestReadings() {
     try {
-        if (!window.dbConfig.client) {
+        if (!window.dbConfig || !window.dbConfig.supabase) {
             throw new Error('Supabase client not initialized');
         }
 
         console.log('Fetching latest readings...');
-        const { data, error } = await window.dbConfig.client
+        const { data, error } = await window.dbConfig.supabase
             .from(window.dbConfig.airQualityTable)
             .select('*')
             .order('timestamp', { ascending: false })
@@ -435,170 +526,215 @@ async function fetchLatestReadings() {
 
 // Initialize the dashboard
 async function initDashboard() {
+    const loadingElement = document.getElementById('loading-indicator');
+    const mainContent = document.getElementById('main-content');
+    
     try {
         console.log('Initializing dashboard...');
+        
+        if (loadingElement) loadingElement.style.display = 'block';
+        if (mainContent) mainContent.style.opacity = '0.5';
         
         // Initialize Supabase first
         const supabaseInitialized = await initializeSupabase();
         if (!supabaseInitialized) {
-            throw new Error('Failed to initialize database connection');
+            throw new Error('Failed to initialize database connection. Please check your configuration.');
         }
+        console.log('Database connection initialized');
 
         // Initialize sensor status tracking
-        if (window.sensorStatus && typeof window.sensorStatus.init === 'function') {
-            window.sensorStatus.init();
-        } else {
-            console.warn('Sensor status tracking not available');
+        try {
+            if (window.sensorStatus && typeof window.sensorStatus.init === 'function') {
+                await window.sensorStatus.init();
+                console.log('Sensor status tracking initialized');
+            } else {
+                console.warn('Sensor status tracking not available');
+            }
+        } catch (sensorError) {
+            console.error('Error initializing sensor status:', sensorError);
+            // Non-critical error, continue initialization
         }
         
         // Set up event listeners
-        setupEventListeners();
+    setupEventListeners();
+        console.log('Event listeners initialized');
         
         // Initialize charts
-        initCharts();
+        const chartsInitialized = initCharts();
+        if (!chartsInitialized) {
+            throw new Error('Failed to initialize charts. Please check if the chart container exists.');
+        }
+        console.log('Charts initialized');
         
         // Initialize the map
-        initMap();
+        try {
+            initMap();
+            console.log('Map initialized');
+        } catch (mapError) {
+            console.error('Error initializing map:', mapError);
+            showError('Map initialization failed, but dashboard will continue to function');
+        }
         
         // Fetch initial data
-        await fetchInitialData();
+        await refreshData();
+        console.log('Initial data fetched');
         
         // Start periodic updates
         setInterval(refreshData, 60000); // Update every minute
         
         console.log('Dashboard initialized successfully');
+        
+        // Show success message
+        const successMsg = document.getElementById('success-message');
+        if (successMsg) {
+            successMsg.textContent = 'Dashboard initialized successfully';
+            successMsg.style.display = 'block';
+            setTimeout(() => successMsg.style.display = 'none', 3000);
+        }
     } catch (error) {
         console.error('Error initializing dashboard:', error);
         showError('Failed to initialize dashboard: ' + error.message);
+    } finally {
+        if (loadingElement) loadingElement.style.display = 'none';
+        if (mainContent) mainContent.style.opacity = '1';
     }
 }
 
 // Initialize charts
 function initCharts() {
-    const chartElement = document.getElementById('air-quality-chart');
-    if (!chartElement) {
-        console.error('Chart element not found');
-        return;
-    }
+    try {
+        const chartElement = document.getElementById('air-quality-chart');
+        if (!chartElement) {
+            console.error('Chart element not found');
+            return false;
+        }
 
-    const ctx = chartElement.getContext('2d');
-    if (!ctx) {
-        console.error('Failed to get chart context');
-        return;
-    }
+        const ctx = chartElement.getContext('2d');
+        if (!ctx) {
+            console.error('Failed to get chart context');
+            return false;
+        }
 
-    // Set Chart.js defaults
-    Chart.defaults.font.family = "'Manrope', sans-serif";
-    Chart.defaults.color = '#94A3B8';
-    Chart.defaults.elements.line.tension = 0.4;
-    Chart.defaults.elements.line.borderWidth = 2;
-    Chart.defaults.elements.point.radius = 0;
-    Chart.defaults.elements.point.hoverRadius = 5;
+        // Set Chart.js defaults
+        Chart.defaults.font.family = "'Manrope', sans-serif";
+        Chart.defaults.color = '#94A3B8';
+        Chart.defaults.elements.line.tension = 0.4;
+        Chart.defaults.elements.line.borderWidth = 2;
+        Chart.defaults.elements.point.radius = 0;
+        Chart.defaults.elements.point.hoverRadius = 5;
 
-    // Create gradient for background
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(255, 122, 0, 0.1)');
-    gradient.addColorStop(1, 'rgba(255, 122, 0, 0)');
+        // Create gradient for background
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(255, 122, 0, 0.1)');
+        gradient.addColorStop(1, 'rgba(255, 122, 0, 0)');
 
-    // Initialize main chart
-    mainChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            datasets: [
-                {
-                    label: 'Makhmor Road',
-                    borderColor: '#F97316',
-                    backgroundColor: gradient,
-                    data: [],
-                    yAxisID: 'pm25',
-                    borderWidth: 3
-                },
-                {
-                    label: 'Namaz Area',
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    data: [],
-                    yAxisID: 'pm25',
-                    borderWidth: 3
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
+        // Initialize main chart
+        mainChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Makhmor Road',
+                        borderColor: '#F97316',
+                        backgroundColor: gradient,
+                        data: [],
+                        yAxisID: 'pm25',
+                        borderWidth: 3
+                    },
+                    {
+                        label: 'Namaz Area',
+                        borderColor: '#3B82F6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        data: [],
+                        yAxisID: 'pm25',
+                        borderWidth: 3
+                    }
+                ]
             },
-            plugins: {
-                tooltip: {
-                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                    titleColor: '#E2E8F0',
-                    bodyColor: '#94A3B8',
-                    titleFont: {
-                        weight: 'bold',
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#E2E8F0',
+                        bodyColor: '#94A3B8',
+                        titleFont: {
+                            weight: 'bold',
+                        },
+                        bodyFont: {
+                            size: 12,
+                        },
+                        padding: 12,
+                        boxPadding: 6,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y} μg/m³`;
+                            }
+                        }
                     },
-                    bodyFont: {
-                        size: 12,
-                    },
-                    padding: 12,
-                    boxPadding: 6,
-                    callbacks: {
-                        label: function(context) {
-                            return `${context.dataset.label}: ${context.parsed.y} μg/m³`;
+                    legend: {
+                        position: 'top',
+                        align: 'start',
+                        labels: {
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            padding: 20,
+                            color: '#1F2937',
+                            font: {
+                                size: 14,
+                                weight: '600'
+                            },
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
                     }
                 },
-                legend: {
-                    position: 'top',
-                    align: 'start',
-                    labels: {
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        padding: 20,
-                        color: '#1F2937',
-                        font: {
-                            size: 14,
-                            weight: '600'
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'hour',
-                        displayFormats: {
-                            hour: 'HH:mm',
-                            day: 'MMM D'
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'HH:mm',
+                                day: 'MMM D'
+                            }
+                        },
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#94A3B8'
                         }
                     },
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#94A3B8'
-                    }
-                },
-                pm25: {
-                    type: 'linear',
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'PM2.5 (μg/m³)',
-                        color: '#94A3B8'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#94A3B8'
+                    pm25: {
+                        type: 'linear',
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'PM2.5 (μg/m³)',
+                            color: '#94A3B8'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#94A3B8'
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error initializing charts:', error);
+        return false;
+    }
 }
 
 // Update the dashboard with the latest data
@@ -634,7 +770,7 @@ async function updateDashboard() {
             // Update Location 1 (Makhmor Road)
             if (location1Readings.length > 0) {
                 updateLocationData('location1', location1Readings);
-            } else {
+    } else {
                 showError('No readings available for Makhmor Road sensor');
                 updateDefaultValues('location1');
             }
@@ -1009,18 +1145,18 @@ function simplifyLocation(location) {
 }
 
 // Update charts with the latest data
-function updateCharts() {
+function updateCharts(data) {
     console.log('Updating charts with time range:', currentTimeRange);
     const now = new Date();
     const timeLimit = timeRanges[currentTimeRange];
     
     // Filter data based on time range
-    const filteredLocation1Data = location1Data.filter(reading => {
+    const filteredLocation1Data = data.filter(reading => {
         const readingTime = new Date(reading.timestamp);
         return (now - readingTime) <= timeLimit;
     }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     
-    const filteredLocation2Data = location2Data.filter(reading => {
+    const filteredLocation2Data = data.filter(reading => {
         const readingTime = new Date(reading.timestamp);
         return (now - readingTime) <= timeLimit;
     }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -1121,9 +1257,9 @@ function setupEventListeners() {
                 showError('Failed to refresh data: ' + error.message);
             } finally {
                 if (refreshIcon) {
-                    setTimeout(() => {
+                setTimeout(() => {
                         refreshIcon.classList.remove('animate-spin');
-                    }, 500);
+                }, 500);
                 }
             }
         });
@@ -1139,477 +1275,30 @@ function setupEventListeners() {
     
     // Pagination buttons
     if (prevPageButton && nextPageButton) {
-        prevPageButton.addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                updateDataTable();
-            }
-        });
-        
-        nextPageButton.addEventListener('click', () => {
-            const totalPages = Math.ceil(allReadings.length / itemsPerPage);
-            if (currentPage < totalPages) {
-                currentPage++;
-                updateDataTable();
-            }
-        });
-    }
-}
-
-// Initialize the dashboard when the page loads
-document.addEventListener('DOMContentLoaded', initDashboard);
-
-// Air Quality Dashboard - Database Connection
-
-// We'll use the Supabase JavaScript client to connect to the PostgreSQL database
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        // Initialize Supabase client
-        if (!window.dbConfig || !window.dbConfig.supabaseKey) {
-            throw new Error('Supabase configuration not found');
-        }
-        
-        const supabase = window.supabase = createClient(
-            window.dbConfig.supabaseUrl,
-            window.dbConfig.supabaseKey
-        );
-        
-        console.log('Supabase client initialized');
-        
-        // Initialize the dashboard components
-        initDashboard();
-        
-        // Fetch initial data
-        await fetchInitialData();
-        
-        // Set up real-time subscription
-        setupRealtimeSubscription(supabase);
-        
-        // Update time display
-        setInterval(() => {
-            const now = new Date();
-            if (currentTimeElement) {
-                currentTimeElement.textContent = formatDateTime(now);
-            }
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error initializing dashboard:', error);
-        // Display error to user
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative';
-        errorDiv.role = 'alert';
-        errorDiv.innerHTML = `
-            <strong class="font-bold">Error!</strong>
-            <span class="block sm:inline"> Failed to initialize dashboard. Please check your configuration.</span>
-        `;
-        document.body.insertBefore(errorDiv, document.body.firstChild);
-    }
-});
-
-// PM2.5 Chart Initialization
-let pm25Chart;
-
-function initChart() {
-    // Use the correct chart element ID that exists in the HTML
-    const ctx = document.getElementById('air-quality-chart').getContext('2d');
-    
-    // Create gradient for chart
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(255, 122, 0, 0.5)');
-    gradient.addColorStop(1, 'rgba(255, 122, 0, 0.0)');
-    
-    pm25Chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [
-                {
-                    label: 'Makhmor Road',
-                    data: [],
-                    borderColor: '#FF7A00',
-                    backgroundColor: gradient,
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 3,
-                    pointBackgroundColor: '#FF7A00'
-                },
-                {
-                    label: 'Namaz Area',
-                    data: [],
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 3,
-                    pointBackgroundColor: '#3B82F6'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        usePointStyle: true,
-                        boxWidth: 6,
-                        color: '#94A3B8'
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(17, 24, 39, 0.8)',
-                    titleColor: '#F3F4F6',
-                    bodyColor: '#E5E7EB',
-                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                    borderWidth: 1,
-                    displayColors: false,
-                    callbacks: {
-                        label: function(context) {
-                            return `PM2.5: ${context.parsed.y} μg/m³`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#94A3B8'
-                    }
-                },
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(148, 163, 184, 0.1)'
-                    },
-                    ticks: {
-                        color: '#94A3B8',
-                        callback: function(value) {
-                            return value + ' μg/m³';
-                        }
-                    }
-                }
-            }
+    prevPageButton.addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            updateDataTable();
         }
     });
-}
-
-// Initialize chart
-initChart();
-
-// Function to get PM2.5 quality status
-function getPM25Status(value) {
-    if (value <= 12) return { text: 'Good', color: '#10B981' };
-    if (value <= 35.4) return { text: 'Moderate', color: '#FBBF24' };
-    if (value <= 55.4) return { text: 'Unhealthy for Sensitive Groups', color: '#F59E0B' };
-    if (value <= 150.4) return { text: 'Unhealthy', color: '#EF4444' };
-    if (value <= 250.4) return { text: 'Very Unhealthy', color: '#8B5CF6' };
-    return { text: 'Hazardous', color: '#7F1D1D' };
-}
-
-// Format timestamp
-function formatTimestamp(timestamp) {
-    if (!timestamp) return 'N/A';
     
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
+    nextPageButton.addEventListener('click', () => {
+        const totalPages = Math.ceil(allReadings.length / itemsPerPage);
+        if (currentPage < totalPages) {
+            currentPage++;
+            updateDataTable();
+        }
     });
-}
-
-// Update chart with new data
-function updateChart(data) {
-    // Process data for chart
-    const timeLabels = [];
-    const location1Data = [];
-    const location2Data = [];
-    
-    // Filter and sort data for the last 24 hours
-    const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    const recentData = data.filter(reading => new Date(reading.timestamp) > yesterday);
-    
-    // Group by location and sort by timestamp
-    const location1Readings = recentData
-        .filter(reading => reading.location === 'Makhmor Road')
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    const location2Readings = recentData
-        .filter(reading => reading.location === 'Namaz Area')
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    // Get unique timestamps from both locations
-    const timestamps = [...new Set([
-        ...location1Readings.map(r => r.timestamp),
-        ...location2Readings.map(r => r.timestamp)
-    ])].sort();
-    
-    // Create time labels for chart (using only some points to avoid overcrowding)
-    const step = Math.max(1, Math.floor(timestamps.length / 12)); // Aim for ~12 points on the chart
-    
-    for (let i = 0; i < timestamps.length; i += step) {
-        const date = new Date(timestamps[i]);
-        timeLabels.push(date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        }));
-        
-        // Find readings closest to this timestamp for each location
-        const l1Reading = location1Readings.find(r => r.timestamp === timestamps[i]);
-        const l2Reading = location2Readings.find(r => r.timestamp === timestamps[i]);
-        
-        location1Data.push(l1Reading ? l1Reading.pm25 : null);
-        location2Data.push(l2Reading ? l2Reading.pm25 : null);
     }
-    
-    // Update chart data
-    pm25Chart.data.labels = timeLabels;
-    pm25Chart.data.datasets[0].data = location1Data;
-    pm25Chart.data.datasets[1].data = location2Data;
-    pm25Chart.update();
-}
-
-// Function to initialize map
-function initMap() {
-    const map = L.map('map').setView([36.0, 43.8], 8);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-    
-    // Store map instance globally
-    window.airQualityMap = map;
-    window.mapMarkers = [];
-    
-    // Initialize markers with no data
-    const initialLocations = [
-        { lat: 35.7749, lng: 43.5883, name: 'Makhmor Road', reading: null },
-        { lat: 36.1901, lng: 44.0091, name: 'Namaz Area', reading: null }
-    ];
-    updateMapMarkers(initialLocations);
-}
-
-// Function to update map markers
-window.updateMapMarkers = function(locations) {
-    const map = window.airQualityMap;
-    if (!map) {
-        console.warn('Map not initialized');
-        return;
-    }
-    
-    // Clear existing markers
-    if (window.mapMarkers) {
-        window.mapMarkers.forEach(marker => marker.remove());
-    }
-    window.mapMarkers = [];
-    
-    // Add new markers
-    locations.forEach(location => {
-        const marker = createMarker(location, location.reading);
-        marker.addTo(map);
-        window.mapMarkers.push(marker);
-    });
-};
-
-// Keep track of recent readings for each location
-window.recentReadings = {
-    location1: [],
-    location2: []
-};
-
-// Function to update recent readings display
-function updateRecentReadings(location, readings) {
-    const locationId = location.toLowerCase().replace(/\s+/g, '');
-    const container = document.getElementById(`${locationId}-updates`);
-    if (!container) return;
-
-    // Store the 5 most recent readings
-    window.recentReadings[locationId] = readings
-        .filter(reading => reading.location === location)
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 5);
-
-    // Update the display
-    container.innerHTML = window.recentReadings[locationId]
-        .map(reading => `
-            <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <div>
-                    <span class="font-medium">${reading.pm25.toFixed(1)} μg/m³</span>
-                    <span class="text-xs text-gray-500 ml-2">${getPM25Status(reading.pm25).text}</span>
-                </div>
-                <div class="text-xs text-gray-500">${formatTimestamp(reading.timestamp)}</div>
-            </div>
-        `)
-        .join('');
-
-    // Update the map marker with the most recent reading
-    if (window.recentReadings[locationId].length > 0) {
-        const mostRecent = window.recentReadings[locationId][0];
-        document.getElementById(`${locationId}-pm25`).textContent = `${mostRecent.pm25.toFixed(1)} PM2.5`;
-        document.getElementById(`${locationId}-timestamp`).textContent = formatTimestamp(mostRecent.timestamp);
-        if (window.updateMapData) {
-            window.updateMapData();
-        }
-    }
-}
-
-// Modify the fetchInitialData function to include recent readings update
-async function fetchInitialData() {
-    console.log('Starting fetchInitialData...');
-    try {
-        console.log('Checking Supabase client:', window.dbConfig.supabase);
-        
-        if (!window.dbConfig || !window.dbConfig.supabase) {
-            throw new Error('Supabase client not initialized');
-        }
-
-        console.log('Fetching data from sensor_data table...');
-        const { data, error } = await window.dbConfig.supabase
-            .from('sensor_data')
-            .select('*')
-            .order('timestamp', { ascending: false });
-
-        console.log('Supabase response:', { data, error });
-
-        if (error) {
-            console.error('Supabase error:', error);
-            throw error;
-        }
-
-        if (!data || data.length === 0) {
-            console.log('No data returned from Supabase');
-            showError('No sensor data available');
-            return;
-        }
-
-        console.log('Processing data for locations...');
-        // Update recent readings for each location
-        updateRecentReadings('Makhmor Road', data);
-        updateRecentReadings('Namaz Area', data);
-
-        // Update chart and other displays
-        console.log('Updating chart...');
-        updateChart(data);
-        
-        console.log('Updating dashboard...');
-        updateDashboard(data);
-        
-        // Process data for locations
-        const location1Data = data.filter(reading => reading.location === 'Makhmor Road');
-        const location2Data = data.filter(reading => reading.location === 'Namaz Area');
-        
-        console.log('Filtered location data:', {
-            'Makhmor Road': location1Data.length,
-            'Namaz Area': location2Data.length
-        });
-
-        // Update map markers
-        if (location1Data.length > 0 || location2Data.length > 0) {
-            const locations = [
-                { lat: 35.7749, lng: 43.5883, name: 'Makhmor Road', reading: location1Data[0] },
-                { lat: 36.1901, lng: 44.0091, name: 'Namaz Area', reading: location2Data[0] }
-            ];
-            console.log('Updating map markers with locations:', locations);
-            window.updateMapMarkers(locations);
-        } else {
-            console.log('No location data available for map markers');
-        }
-        
-    } catch (error) {
-        console.error('Error in fetchInitialData:', error);
-        console.error('Error stack:', error.stack);
-        showError('Failed to fetch air quality data: ' + error.message);
-    }
-}
-
-// Helper function to show errors to the user
-function showError(message) {
-    console.error(message);
-    const errorDiv = document.getElementById('error-message');
-    if (errorDiv) {
-        errorDiv.textContent = message;
-        errorDiv.style.display = 'block';
-        setTimeout(() => {
-            errorDiv.style.display = 'none';
-        }, 5000);
-    } else {
-        alert(message);
-    }
-}
-
-// Modify the subscription callback to update recent readings
-function subscribeToUpdates() {
-    const subscription = window.dbConfig.supabase
-        .channel('air_quality_updates')
-        .on('postgres_changes', 
-            {
-                event: '*',
-                schema: 'public',
-                table: 'sensor_data'
-            },
-            async (payload) => {
-                // Fetch latest data to ensure we have complete dataset
-                const { data, error } = await window.dbConfig.supabase
-                    .from('sensor_data')
-                    .select('*')
-                    .order('timestamp', { ascending: false });
-
-                if (!error) {
-                    // Update recent readings for both locations
-                    updateRecentReadings('Makhmor Road', data);
-                    updateRecentReadings('Namaz Area', data);
-                    
-                    // Update chart
-                    updateChart(data);
-                    
-                    // Update dashboard
-                    updateDashboard(data);
-                    
-                    // Process data for locations
-                    const location1Data = data.filter(reading => reading.location === 'Makhmor Road');
-                    const location2Data = data.filter(reading => reading.location === 'Namaz Area');
-                    
-                    // Update map markers
-                    if (location1Data.length > 0 || location2Data.length > 0) {
-                        const locations = [
-                            { lat: 35.7749, lng: 43.5883, name: 'Makhmor Road', reading: location1Data[0] },
-                            { lat: 36.1901, lng: 44.0091, name: 'Namaz Area', reading: location2Data[0] }
-                        ];
-                        window.updateMapMarkers(locations);
-                    }
-                }
-            }
-        )
-        .subscribe();
-
-    return subscription;
 }
 
 // Initialize everything when the page loads
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     try {
-        // Initialize map if the element exists
-        if (document.getElementById('map')) {
-            initMap();
-        }
+        console.log('Starting dashboard initialization...');
         
-        // Initialize sensor status monitoring if available
-        if (window.sensorStatus && typeof window.sensorStatus.init === 'function') {
-            window.sensorStatus.init();
-        }
-        
-        // Initialize Supabase and dashboard
-        initializeSupabase();
+        // Initialize dashboard (this will handle Supabase initialization)
+        await initDashboard();
         
     } catch (error) {
         console.error('Error during initialization:', error);

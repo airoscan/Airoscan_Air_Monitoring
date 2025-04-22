@@ -20,6 +20,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     <!-- Custom scripts -->
     <script src="db-config.js"></script>
+    <script src="init-db.js"></script>
+    <script src="config.js"></script>
     <script src="sensor-status.js"></script>
     <script src="app.js"></script>
     <!-- Custom styles -->
@@ -449,7 +451,7 @@
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center">
                 <div class="h-16 w-16 mr-3 flex-shrink-0 overflow-hidden bg-white p-1">
-                    <img src="images/tiu-logo.png" alt="Tishk International University Logo" class="h-full w-full object-contain">
+                    <img src="images/Logo_of_Tishk_International_University.png" alt="Tishk International University Logo" class="h-full w-full object-contain">
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold gradient-text mb-0">AirQuality</h1>
@@ -688,10 +690,22 @@
                 <div class="neo-card floating-card overflow-hidden">
                     <div class="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-gray-200">
                         <h2 class="text-xl font-bold text-gray-800 mb-4 md:mb-0">PM2.5 Concentration <span class="gradient-text">Trends</span></h2>
-                        <div class="flex space-x-2">
-                            <button id="btn-24h" class="px-4 py-2 text-xs font-medium text-white rounded-lg gradient-bg glow">24h</button>
-                            <button id="btn-7d" class="px-4 py-2 text-xs font-medium bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 shadow-sm">7d</button>
-                            <button id="btn-30d" class="px-4 py-2 text-xs font-medium bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 shadow-sm">30d</button>
+                        <div class="flex space-x-2 mb-4">
+                            <button 
+                                class="time-range-btn bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium" 
+                                data-range="24h"
+                                id="btn-24h"
+                            >24h</button>
+                            <button 
+                                class="time-range-btn bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium" 
+                                data-range="7d"
+                                id="btn-7d"
+                            >7d</button>
+                            <button 
+                                class="time-range-btn bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium" 
+                                data-range="30d"
+                                id="btn-30d"
+                            >30d</button>
                         </div>
                     </div>
                     <div class="p-6">
