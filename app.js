@@ -450,18 +450,26 @@ async function initDashboard() {
         } else {
             console.warn('Sensor status tracking not available');
         }
-
+        
+        // Set up event listeners
+        setupEventListeners();
+        
         // Initialize charts
         initCharts();
         
-        // Set up periodic data refresh
-        await refreshData(); // Initial data fetch
-        setInterval(refreshData, 30000); // Refresh every 30 seconds
+        // Initialize the map
+        initMap();
         
-        console.log('Dashboard initialization complete');
+        // Fetch initial data
+        await fetchInitialData();
+        
+        // Start periodic updates
+        setInterval(refreshData, 60000); // Update every minute
+        
+        console.log('Dashboard initialized successfully');
     } catch (error) {
-        console.error('Dashboard initialization failed:', error);
-        showError(`Failed to initialize dashboard: ${error.message}`);
+        console.error('Error initializing dashboard:', error);
+        showError('Failed to initialize dashboard: ' + error.message);
     }
 }
 
@@ -498,18 +506,20 @@ function initCharts() {
         data: {
             datasets: [
                 {
-                    label: 'Makhmor Road PM2.5',
+                    label: 'Makhmor Road',
                     borderColor: '#F97316',
                     backgroundColor: gradient,
                     data: [],
-                    yAxisID: 'pm25'
+                    yAxisID: 'pm25',
+                    borderWidth: 3
                 },
                 {
-                    label: 'Namaz Area PM2.5',
+                    label: 'Namaz Area',
                     borderColor: '#3B82F6',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     data: [],
-                    yAxisID: 'pm25'
+                    yAxisID: 'pm25',
+                    borderWidth: 3
                 }
             ]
         },
@@ -532,14 +542,25 @@ function initCharts() {
                         size: 12,
                     },
                     padding: 12,
-                    boxPadding: 6
+                    boxPadding: 6,
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.parsed.y} μg/m³`;
+                        }
+                    }
                 },
                 legend: {
                     position: 'top',
+                    align: 'start',
                     labels: {
-                        usePointStyle: true,
+                        boxWidth: 12,
+                        boxHeight: 12,
                         padding: 20,
-                        color: '#E2E8F0'
+                        color: '#1F2937',
+                        font: {
+                            size: 14,
+                            weight: '600'
+                        }
                     }
                 }
             },
@@ -549,11 +570,15 @@ function initCharts() {
                     time: {
                         unit: 'hour',
                         displayFormats: {
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM D'
                         }
                     },
                     grid: {
                         display: false
+                    },
+                    ticks: {
+                        color: '#94A3B8'
                     }
                 },
                 pm25: {
@@ -561,10 +586,14 @@ function initCharts() {
                     position: 'left',
                     title: {
                         display: true,
-                        text: 'PM2.5 (μg/m³)'
+                        text: 'PM2.5 (μg/m³)',
+                        color: '#94A3B8'
                     },
                     grid: {
                         color: 'rgba(255, 255, 255, 0.05)'
+                    },
+                    ticks: {
+                        color: '#94A3B8'
                     }
                 }
             }
@@ -981,172 +1010,150 @@ function simplifyLocation(location) {
 
 // Update charts with the latest data
 function updateCharts() {
-    console.log('Updating charts');
+    console.log('Updating charts with time range:', currentTimeRange);
     const now = new Date();
     const timeLimit = timeRanges[currentTimeRange];
     
-    // Function to normalize readings
-    function normalizeReading(reading) {
-        const timestamp = reading.timestamp instanceof Date ? 
-            reading.timestamp : new Date(reading.timestamp);
-            
-        const pm25 = parseFloat(reading.pm25);
-        const humidity = parseFloat(reading.humidity || 0);
-        
-        if (isNaN(pm25) || isNaN(humidity)) {
-            console.warn('Invalid reading values:', reading);
-            return null;
-        }
-        
-        if (isNaN(timestamp.getTime())) {
-            console.warn('Invalid timestamp:', reading.timestamp);
-            return null;
-        }
-        
-        return {
-            ...reading,
-            timestamp,
-            pm25,
-            humidity
-        };
-    }
+    // Filter data based on time range
+    const filteredLocation1Data = location1Data.filter(reading => {
+        const readingTime = new Date(reading.timestamp);
+        return (now - readingTime) <= timeLimit;
+    }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     
-    // Filter and normalize data
-    const normalizedLocation1Data = location1Data
-        .map(normalizeReading)
-        .filter(r => r !== null && (now - r.timestamp) <= timeLimit)
-        .sort((a, b) => a.timestamp - b.timestamp);
+    const filteredLocation2Data = location2Data.filter(reading => {
+        const readingTime = new Date(reading.timestamp);
+        return (now - readingTime) <= timeLimit;
+    }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    console.log(`Filtered data - Location 1: ${filteredLocation1Data.length}, Location 2: ${filteredLocation2Data.length}`);
+    
+    if (mainChart) {
+        // Update datasets
+        mainChart.data.datasets[0].data = filteredLocation1Data.map(reading => ({
+            x: new Date(reading.timestamp),
+            y: reading.pm25
+        }));
         
-    const normalizedLocation2Data = location2Data
-        .map(normalizeReading)
-        .filter(r => r !== null && (now - r.timestamp) <= timeLimit)
-        .sort((a, b) => a.timestamp - b.timestamp);
-    
-    // Update main chart data
-    mainChart.data.datasets[0].data = normalizedLocation1Data.map(r => ({
-        x: r.timestamp,
-        y: r.pm25
-    }));
-    
-    mainChart.data.datasets[1].data = normalizedLocation2Data.map(r => ({
-        x: r.timestamp,
-        y: r.pm25
-    }));
-
-    mainChart.data.datasets[2].data = normalizedLocation1Data.map(r => ({
-        x: r.timestamp,
-        y: r.humidity
-    }));
-
-    mainChart.data.datasets[3].data = normalizedLocation2Data.map(r => ({
-        x: r.timestamp,
-        y: r.humidity
-    }));
-    
-    // Update time unit based on selected range
-    if (currentTimeRange === '24h') {
-        mainChart.options.scales.x.time.unit = 'hour';
-    } else if (currentTimeRange === '7d') {
-        mainChart.options.scales.x.time.unit = 'day';
+        mainChart.data.datasets[1].data = filteredLocation2Data.map(reading => ({
+            x: new Date(reading.timestamp),
+            y: reading.pm25
+        }));
+        
+        // Update chart
+        mainChart.update();
     } else {
-        mainChart.options.scales.x.time.unit = 'week';
+        console.error('Main chart not initialized');
     }
-    
-    mainChart.update();
-    
-    // Update individual location charts
-    // ... rest of the existing updateCharts code ...
 }
 
-// Set the time range for the main chart
+// Function to set time range
 function setTimeRange(range) {
-    // Update active button
-    btn24h.classList.toggle('gradient-bg', range === '24h');
-    btn24h.classList.toggle('text-white', range === '24h');
-    btn24h.classList.toggle('glow', range === '24h');
-    btn24h.classList.toggle('bg-white', range !== '24h');
-    btn24h.classList.toggle('text-gray-700', range !== '24h');
+    console.log('Setting time range to:', range);
     
-    btn7d.classList.toggle('gradient-bg', range === '7d');
-    btn7d.classList.toggle('text-white', range === '7d');
-    btn7d.classList.toggle('glow', range === '7d');
-    btn7d.classList.toggle('bg-white', range !== '7d');
-    btn7d.classList.toggle('text-gray-700', range !== '7d');
+    // Update button states
+    const timeRangeButtons = document.querySelectorAll('.time-range-btn');
+    timeRangeButtons.forEach(btn => {
+        btn.classList.remove('bg-orange-500', 'text-white');
+        btn.classList.add('bg-gray-100', 'text-gray-600');
+    });
     
-    btn30d.classList.toggle('gradient-bg', range === '30d');
-    btn30d.classList.toggle('text-white', range === '30d');
-    btn30d.classList.toggle('glow', range === '30d');
-    btn30d.classList.toggle('bg-white', range !== '30d');
-    btn30d.classList.toggle('text-gray-700', range !== '30d');
+    // Set active button
+    const activeButton = document.querySelector(`[data-range="${range}"]`);
+    if (activeButton) {
+        activeButton.classList.remove('bg-gray-100', 'text-gray-600');
+        activeButton.classList.add('bg-orange-500', 'text-white');
+    }
     
+    // Update current time range
     currentTimeRange = range;
-    updateCharts();
+    
+    // Update chart configuration based on time range
+    if (mainChart) {
+        const timeUnit = range === '24h' ? 'hour' : 'day';
+        mainChart.options.scales.x.time.unit = timeUnit;
+        
+        // Set display formats based on range
+        switch (range) {
+            case '24h':
+                mainChart.options.scales.x.time.displayFormats = {
+                    hour: 'HH:mm'
+                };
+                break;
+            case '7d':
+            case '30d':
+                mainChart.options.scales.x.time.displayFormats = {
+                    day: 'MMM D'
+                };
+                break;
+        }
+        
+        // Update chart data for the new time range
+        refreshData().catch(error => {
+            console.error('Error refreshing data after time range change:', error);
+            showError('Failed to update chart with new time range: ' + error.message);
+        });
+    }
 }
 
 // Setup event listeners
 function setupEventListeners() {
+    // Time range buttons
+    document.querySelectorAll('.time-range-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const range = button.getAttribute('data-range');
+            console.log(`${range} button clicked`);
+            setTimeRange(range);
+        });
+    });
+
     // Refresh button
     const refreshBtn = document.getElementById('refresh-btn');
-    refreshBtn.addEventListener('click', () => {
-        // Add rotate animation
-        refreshBtn.querySelector('svg').classList.add('animate-spin');
-        
-        // Call the Supabase initialization function instead
-        if (typeof window.supabaseInitDashboard === 'function') {
-            window.supabaseInitDashboard().then(() => {
-                setTimeout(() => {
-                    refreshBtn.querySelector('svg').classList.remove('animate-spin');
-                }, 500);
-            });
-        } else {
-            console.error('Supabase initialization function not found');
-            setTimeout(() => {
-                refreshBtn.querySelector('svg').classList.remove('animate-spin');
-            }, 500);
-        }
-    });
-    
-    // Pagination buttons
-    prevPageButton.addEventListener('click', () => {
-        if (currentPage > 1) {
-            currentPage--;
-            updateDataTable();
-        }
-    });
-    
-    nextPageButton.addEventListener('click', () => {
-        const totalPages = Math.ceil(allReadings.length / itemsPerPage);
-        if (currentPage < totalPages) {
-            currentPage++;
-            updateDataTable();
-        }
-    });
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            const refreshIcon = refreshBtn.querySelector('svg');
+            if (refreshIcon) refreshIcon.classList.add('animate-spin');
+            
+            try {
+                await refreshData();
+                console.log('Data refreshed successfully');
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                showError('Failed to refresh data: ' + error.message);
+            } finally {
+                if (refreshIcon) {
+                    setTimeout(() => {
+                        refreshIcon.classList.remove('animate-spin');
+                    }, 500);
+                }
+            }
+        });
+    }
     
     // Location filter
-    locationFilterElement.addEventListener('change', () => {
-        currentPage = 1;
-        updateDataTable();
-    });
+    if (locationFilterElement) {
+        locationFilterElement.addEventListener('change', () => {
+            currentPage = 1;
+            updateDataTable();
+        });
+    }
     
-    // Time range buttons
-    btn24h.addEventListener('click', () => {
-        setTimeRange('24h');
-    });
-    
-    btn7d.addEventListener('click', () => {
-        setTimeRange('7d');
-    });
-    
-    btn30d.addEventListener('click', () => {
-        setTimeRange('30d');
-    });
-    
-    // Set up real-time updates - this will be handled by Supabase now
-    /*
-    setInterval(() => {
-        fetchSensorData();
-    }, 60000); // Refresh every minute
-    */
+    // Pagination buttons
+    if (prevPageButton && nextPageButton) {
+        prevPageButton.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updateDataTable();
+            }
+        });
+        
+        nextPageButton.addEventListener('click', () => {
+            const totalPages = Math.ceil(allReadings.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateDataTable();
+            }
+        });
+    }
 }
 
 // Initialize the dashboard when the page loads
