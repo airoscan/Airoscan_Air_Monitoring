@@ -209,20 +209,20 @@ async function refreshData() {
             throw new Error('Database configuration not found. Please reload the page.');
         }
 
-        // Check if we have an API key
-        if (!window.dbConfig.supabaseKey) {
-            const error = new Error('No API key found. Please set your Supabase API key in the configuration.');
-            error.type = 'CONFIG_ERROR';
-            throw error;
-        }
+        // // Check if we have an API key
+        // if (!window.dbConfig.supabaseKey) {
+        //     const error = new Error('No API key found. Please set your Supabase API key in the configuration.');
+        //     error.type = 'CONFIG_ERROR';
+        //     throw error;
+        // }
 
-        // Ensure client is initialized
-        if (!window.dbConfig.client) {
-            const success = window.dbConfig.initClient();
-            if (!success) {
-                throw new Error('Failed to initialize Supabase client. Please check your API key.');
-            }
-        }
+        // Ensure client exists (it should have been initialized by db-config.js)
+   if (!window.dbConfig.client) {
+    // If the client doesn't exist here, initClient() in db-config.js must have failed.
+    // Check the console for errors from db-config.js.
+    console.error("dbConfig.client not found in refreshData. Initialization likely failed earlier.");
+    throw new Error('Database client is not available. Check console for initialization errors.');
+}
 
         console.log('Starting data refresh...');
 
