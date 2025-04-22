@@ -4,8 +4,7 @@ const SUPABASE_URL = 'https://gyrcemnqauyoxkjwprjg.supabase.co';
 // --- PASTE YOUR PUBLIC ANON KEY HERE ---
 // This key is safe to include in your frontend code for read-only access.
 // Get it from your Supabase Project > Settings > API > Project API Keys
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5cmNlbW5xYXV5b3hrandwcmpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwNjgxOTMsImV4cCI6MjA1NzY0NDE5M30.x48M-AQjLMYwUA_aPNvlNnnkYrOfmexbYj8gX-RNtnA
-";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5cmNlbW5xYXV5b3hrandwcmpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwNjgxOTMsImV4cCI6MjA1NzY0NDE5M30.x48M-AQjLMYwUA_aPNvlNnnkYrOfmexbYj8gX-RNtnA";
 // --- END OF KEY ---
 
 // Database table name

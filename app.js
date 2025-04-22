@@ -489,64 +489,45 @@ function getAirQualityStatus(pm25) {
     return { status: 'Hazardous', bgColor: 'bg-red-900', textColor: 'text-white' }; // Use darker red for Hazardous
 }
 
-// Initialize Supabase client
+// Initialize Supabase client (Simplified Check)
+// This function now just verifies the client created by db-config.js is ready.
 async function initializeSupabase() {
+    console.log("Verifying Supabase client status..."); // Log start
     try {
-        if (!window.dbConfig) {
-            throw new Error('Database configuration not found. Make sure db-config.js is loaded.');
-        }
-        if (!window.dbConfig.supabaseKey) {
-            // Try to get key from localStorage again, in case init-db.html was just used
-            window.dbConfig.supabaseKey = localStorage.getItem('supabase_api_key');
-            if (!window.dbConfig.supabaseKey) {
-                throw new Error('Supabase API key not found. Please set your API key first (e.g., using init-db.html).');
-            } else {
-                 console.log("Retrieved API key from localStorage.");
-            }
+        // Check if dbConfig and the client object exist
+        if (!window.dbConfig || !window.dbConfig.client) {
+            // This error likely means db-config.js failed to initialize the client.
+            // Check db-config.js for the correct ANON_KEY and check browser console for earlier errors.
+             console.error("Supabase client not found. Was it initialized correctly in db-config.js?");
+            throw new Error('Database client initialization failed. Check configuration (API Key in db-config.js) and previous errors.');
         }
 
-        // Initialize the client if not already initialized OR if key changed
-        if (!window.dbConfig.client || window.dbConfig.client.supabaseKey !== window.dbConfig.supabaseKey) {
-             if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
-                window.dbConfig.client = window.supabase.createClient(
-                    window.dbConfig.supabaseUrl,
-                    window.dbConfig.supabaseKey
-                );
-                 console.log("Supabase client initialized or re-initialized.");
-             } else {
-                 throw new Error('Supabase library (supabase-js) not loaded correctly.');
-             }
-        } else {
-            console.log("Supabase client already initialized.");
-        }
-
-
-        // Test the connection using the initialized client
-        const { data, error } = await window.dbConfig.client
+        // Test the existing client connection to ensure it's working (e.g., RLS allows reads)
+        console.log("Testing existing Supabase client connection...");
+        const { error } = await window.dbConfig.client
             .from(window.dbConfig.airQualityTable)
-            .select('id')
-            .limit(1);
+            .select('id', { count: 'exact', head: true }); // More efficient test query
 
         if (error) {
-            // Provide more specific error feedback
-            if (error.message.includes('Invalid API key') || error.message.includes('Unauthorized')) {
-                 throw new Error(`Database connection test failed: Invalid API Key. Please check your key in init-db.html.`);
-            } else if (error.message.includes('fetch failed')) {
-                 throw new Error(`Database connection test failed: Network error. Check internet connection and Supabase URL.`);
-            } else if (error.message.includes('relation') && error.message.includes('does not exist')) {
-                throw new Error(`Database connection test failed: Table '${window.dbConfig.airQualityTable}' not found. Ensure the table exists in Supabase.`);
-            }
+            console.error("Supabase client connection test failed:", error);
+             // Check for common errors like RLS issues
+             if (error.message.includes('security barrier') || error.message.includes('violates row-level security policy')) {
+                 throw new Error(`Database Read Error: Check Row Level Security (RLS) policies on the '${window.dbConfig.airQualityTable}' table in your Supabase project. Allow read access for the 'anon' role.`);
+             } else if (error.message.includes('NetworkError')) {
+                 throw new Error('Database Connection Error: Network issue. Please check your internet connection.');
+             }
             throw new Error(`Database connection test failed: ${error.message}`);
         }
 
-        console.log('Database connection test successful');
-        return true;
+        console.log('Existing Supabase client connection test successful.');
+        // No need to return anything, success means no error was thrown
+        return true; // Indicate success
+
     } catch (error) {
-        console.error('Failed to initialize Supabase:', error);
-        showError(`Database initialization failed: ${error.message}. Please check configuration and network.`);
-        // Attempt to clear potentially bad key from storage
-        try { localStorage.removeItem('supabase_api_key'); } catch(e) {}
-        return false;
+        console.error('Failed during Supabase client verification:', error);
+        // Display the error using the showError function defined elsewhere in app.js
+        showError(`Database Connection Failed: ${error.message}`);
+        return false; // Indicate failure
     }
 }
 
