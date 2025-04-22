@@ -1,28 +1,24 @@
 // Supabase configuration
 const SUPABASE_URL = 'https://gyrcemnqauyoxkjwprjg.supabase.co';
 
-// Get the API key from localStorage if available
-let SUPABASE_KEY = '';
-try {
-    SUPABASE_KEY = localStorage.getItem('supabase_api_key');
-    if (!SUPABASE_KEY) {
-        console.warn('No Supabase API key found in localStorage');
-    }
-} catch (e) {
-    console.error('Unable to access localStorage:', e);
-}
+// --- PASTE YOUR PUBLIC ANON KEY HERE ---
+// This key is safe to include in your frontend code for read-only access.
+// Get it from your Supabase Project > Settings > API > Project API Keys
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5cmNlbW5xYXV5b3hrandwcmpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwNjgxOTMsImV4cCI6MjA1NzY0NDE5M30.x48M-AQjLMYwUA_aPNvlNnnkYrOfmexbYj8gX-RNtnA
+";
+// --- END OF KEY ---
 
-// Database connection string for reference:
-// DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.gyrcemnqauyoxkjwprjg.supabase.co:5432/postgres
+// Database table name
+const AIR_QUALITY_TABLE_NAME = 'sensor_data';
 
-// This is the table structure expected for air quality readings
-// If your actual table structure is different, you'll need to modify the app.js file accordingly
+// Expected table structure comment (for reference)
 /*
   CREATE TABLE sensor_data (
     id SERIAL PRIMARY KEY,
     pm25 NUMERIC NOT NULL,
-    "Location" VARCHAR(255) NOT NULL,
+    "Location" VARCHAR(255) NOT NULL, // Make sure this column exists and stores the location string
     timestamp TIMESTAMPTZ DEFAULT NOW(),
+    humidity NUMERIC, // Optional: Add if you track humidity
     notes TEXT
   );
 */
@@ -30,68 +26,59 @@ try {
 // Database configuration object
 const dbConfig = {
     supabaseUrl: SUPABASE_URL,
-    supabaseKey: SUPABASE_KEY,
-    airQualityTable: 'sensor_data',
-    client: null,
-    
-    // Method to securely set the API key and initialize client
-    setApiKey: function(apiKey) {
-        if (!apiKey) {
-            console.error('Invalid API key provided');
-            return false;
-        }
-        
-        try {
-            // Save to localStorage
-            localStorage.setItem('supabase_api_key', apiKey);
-            this.supabaseKey = apiKey;
-            console.log('API key saved successfully');
-            
-            // Initialize client if Supabase is available
-            if (typeof supabase !== 'undefined') {
-                this.client = supabase.createClient(this.supabaseUrl, apiKey);
-                console.log('Supabase client initialized with new API key');
-                return true;
-            } else {
-                console.error('Supabase library not loaded');
-                return false;
-            }
-        } catch (e) {
-            console.error('Failed to save API key:', e);
-            return false;
-        }
-    },
-    
-    // Method to initialize the client
+    supabaseAnonKey: SUPABASE_ANON_KEY, // Store the key
+    airQualityTable: AIR_QUALITY_TABLE_NAME,
+    client: null, // Supabase client instance
+
+    // Method to initialize the Supabase client
     initClient: function() {
-        if (!this.supabaseKey) {
-            console.error('No API key available. Please set the API key first.');
-            return false;
-        }
-        
-        try {
-            if (typeof supabase === 'undefined') {
-                throw new Error('Supabase library not loaded');
+        // Check if the key was actually pasted in
+        if (!this.supabaseAnonKey || this.supabaseAnonKey === "YOUR_SUPABASE_ANON_KEY_HERE") {
+            console.error('Supabase Anon Key is missing in db-config.js. Please paste it in.');
+            // Optionally, show an error to the user here as well,
+            // because the dashboard won't work without the key.
+            const errorDiv = document.getElementById('error-message');
+            if (errorDiv) {
+                errorDiv.textContent = 'Configuration Error: Missing database key. Site cannot load data.';
+                errorDiv.style.display = 'block';
             }
-            
-            this.client = supabase.createClient(this.supabaseUrl, this.supabaseKey);
-            console.log('Supabase client initialized successfully');
-            return true;
+            return false; // Indicate failure
+        }
+
+        try {
+            // Check if the Supabase library is loaded
+            if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') {
+                throw new Error('Supabase library (supabase-js) not loaded correctly.');
+            }
+
+            // Create the Supabase client using the hardcoded anon key
+            // This single line replaces the old logic that used localStorage
+            this.client = supabase.createClient(this.supabaseUrl, this.supabaseAnonKey);
+            console.log('Supabase client initialized successfully with Anon key.');
+            return true; // Indicate success
+
         } catch (error) {
             console.error('Failed to initialize Supabase client:', error);
-            return false;
+             const errorDiv = document.getElementById('error-message');
+             if (errorDiv) {
+                 errorDiv.textContent = `Error initializing database connection: ${error.message}`;
+                 errorDiv.style.display = 'block';
+             }
+            return false; // Indicate failure
         }
     }
+    // Removed the old setApiKey function as it's not needed for public view
 };
 
-// Make accessible globally if in a browser environment
+// Make dbConfig accessible globally
 if (typeof window !== 'undefined') {
     window.dbConfig = dbConfig;
-    
-    // Try to initialize client if API key is available
-    if (dbConfig.supabaseKey) {
-        dbConfig.initClient();
-    } else {
-        console.warn('Please set your Supabase API key using dbConfig.setApiKey()');
-    }
-} 
+
+    // --- Automatically initialize the client when this script loads ---
+    // This ensures the connection is ready when app.js runs.
+    dbConfig.initClient();
+    // We no longer rely on localStorage or init-db.html for the public dashboard.
+}
+
+// Note: All the old code reading from localStorage or related to setApiKey is removed.
+// This version ONLY uses the hardcoded SUPABASE_ANON_KEY above.
