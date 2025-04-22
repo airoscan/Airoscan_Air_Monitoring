@@ -491,6 +491,8 @@ function getAirQualityStatus(pm25) {
 
 // Initialize Supabase client (Simplified Check)
 // This function now just verifies the client created by db-config.js is ready.
+// Initialize Supabase client (Simplified Check)
+// This function now just verifies the client created by db-config.js is ready.
 async function initializeSupabase() {
     console.log("Verifying Supabase client status..."); // Log start
     try {
