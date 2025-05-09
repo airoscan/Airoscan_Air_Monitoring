@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Air Quality Monitor</title>
+    <script src="https://www.lactame.com/lib/ml-regression/6.0.0/ml-regression.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -16,86 +17,217 @@
         :root {
             --orange-primary: #FF7A00;
             --orange-secondary: #FFB766;
-            --blue-primary: #3B82F6; /* Tailwind blue-500 */
-            --blue-secondary: #60A5FA; /* Tailwind blue-400 */
-            --card-bg: #FFFFFF;
-            --bg-primary: #F9FAFB;
-            --text-primary: #2D3748;
-            --text-secondary: #64748B;
+            --blue-primary: #3B82F6;
+            --blue-secondary: #60A5FA;
+
+            /* Light Mode Defaults */
+            --bg-primary-light: #F9FAFB; /* gray-50 */
+            --bg-secondary-light: #FFFFFF; /* white */
+            --card-bg-light: #FFFFFF;
+            --text-primary-light: #1F2937; /* gray-800 */
+            --text-secondary-light: #4B5563; /* gray-600 */
+            --text-muted-light: #6B7280; /* gray-500 */
+            --border-color-light: #E5E7EB; /* gray-200 */
+            --header-bg-light: rgba(255, 255, 255, 0.85);
+            --header-border-light: rgba(230, 230, 230, 0.7);
+            --icon-color-light: #4B5563;
+            --button-bg-light: #FFFFFF;
+            --button-hover-bg-light: #F3F4F6; /* gray-100 */
+            --leaflet-control-bg-light: #ffffff;
+            --leaflet-control-text-light: #333333;
+            --leaflet-attribution-bg-light: rgba(255, 255, 255, 0.8);
+            --leaflet-attribution-text-light: #333333;
+        }
+
+        /* Dark Mode Variables (Inspired by your screenshot) */
+        .dark {
+            --bg-primary-dark: #0D1117;
+            --bg-secondary-dark: #161B22;
+            --card-bg-dark: #1E293B; /* Tailwind slate-800 */
+            --text-primary-dark: #C9D1D9;
+            --text-secondary-dark: #8B949E;
+            --text-muted-dark: #586069;
+            --border-color-dark: #30363D;
+            --header-bg-dark: rgba(22, 27, 34, 0.85);
+            --header-border-dark: #30363D;
+            --icon-color-dark: #C9D1D9;
+            --button-bg-dark: #21262D;
+            --button-hover-bg-dark: #30363D;
+            --leaflet-control-bg-dark: #161B22;
+            --leaflet-control-text-dark: #C9D1D9;
+            --leaflet-attribution-bg-dark: rgba(13, 17, 23, 0.8);
+            --leaflet-attribution-text-dark: #8B949E;
         }
 
         body {
             font-family: 'Manrope', sans-serif;
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            background-image:
-                radial-gradient(circle at 70% 20%, rgba(255, 122, 0, 0.03) 0%, transparent 70%),
-                radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 70%); /* Added blue gradient */
+            background-color: var(--bg-primary-light);
+            color: var(--text-primary-light);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark body {
+            background-color: var(--bg-primary-dark);
+            color: var(--text-primary-dark);
+            background-image: none; /* Remove light mode gradients */
         }
 
-        /* Map styles - Applied to both map divs */
         .individual-map-container {
-            height: 350px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0;
+            height: 350px; width: 100%; border-radius: 12px;
+            border: 1px solid var(--border-color-light);
+            background-color: #DDDDDD; /* Light fallback bg for map container */
+            transition: border-color 0.3s, background-color 0.3s;
         }
-        .location-area { stroke-width: 1.5; stroke-opacity: 0.6; fillOpacity: 0.2; cursor: pointer; transition: all 0.3s ease; }
-        .location-area:hover { fillOpacity: 0.4; }
-        .location-popup .leaflet-popup-content-wrapper { background-color: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); padding: 8px 12px; }
-        .location-popup .leaflet-popup-tip { background-color: white; }
-        .location-popup-content { font-family: 'Manrope', sans-serif; min-width: 140px; text-align: left; }
-        .location-popup-title { font-weight: 600; font-size: 14px; margin-bottom: 5px; color: var(--text-primary); border-bottom: 1px solid #eee; padding-bottom: 3px; }
-        .location-popup-value { font-weight: 700; font-size: 17px; margin-bottom: 3px; }
-        .location-popup-status { font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; }
-        .location-popup-time { font-size: 0.75rem; color: #64748B; }
+        .dark .individual-map-container {
+            border: 1px solid var(--border-color-dark);
+            background-color: var(--card-bg-dark, #1E293B); /* Dark bg for map container before tiles load */
+        }
 
-        /* Error Banner Styling */
-        #error-message { position: fixed; top: 0; left: 0; right: 0; background-color: #ef4444; color: white; padding: 0.75rem 1rem; z-index: 1000; display: none; text-align: center; font-size: 0.875rem; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .location-popup .leaflet-popup-content-wrapper { background-color: var(--bg-secondary-light); border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); padding: 8px 12px; }
+        .location-popup .leaflet-popup-tip { background-color: var(--bg-secondary-light); }
+        .dark .location-popup .leaflet-popup-content-wrapper { background-color: var(--card-bg-dark); color: var(--text-primary-dark); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); }
+        .dark .location-popup .leaflet-popup-tip { background-color: var(--card-bg-dark); }
+        .location-popup-title { font-weight: 600; font-size: 14px; margin-bottom: 5px; color: var(--text-primary-light); border-bottom: 1px solid var(--border-color-light); padding-bottom: 3px; }
+        .dark .location-popup-title { color: var(--text-primary-dark); border-bottom: 1px solid var(--border-color-dark); }
+        .location-popup-status { font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; color: var(--text-secondary-light); }
+        .dark .location-popup-status { color: var(--text-secondary-dark); }
+        .location-popup-time { font-size: 0.75rem; color: var(--text-muted-light); }
+        .dark .location-popup-time { color: var(--text-muted-dark); }
 
-        /* Card Styles */
-        .neo-card { background: var(--card-bg); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02); border-radius: 16px; border: none; position: relative; overflow: hidden; transform: translateY(0); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); margin-bottom: 15px; }
+        #error-message { position: fixed; top: 0; left: 0; right: 0; background-color: #ef4444; color: white; padding: 0.75rem 1rem; z-index: 10000; display: none; text-align: center; font-size: 0.875rem; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+        .neo-card {
+            background: var(--card-bg-light);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
+            border-radius: 16px; border: none; position: relative; overflow: hidden;
+            transform: translateY(0);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s;
+            margin-bottom: 15px;
+        }
+        .dark .neo-card {
+            background: var(--card-bg-dark);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); /* Subtler shadow for dark */
+        }
         .neo-card:hover { box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08), 0 0 60px rgba(255, 122, 0, 0.08); transform: translateY(-8px); }
-        .hover-lift:hover { transform: translateY(-8px) scale(1.01); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08), 0 0 60px rgba(255, 122, 0, 0.08); }
+        .dark .neo-card:hover { box-shadow: 0 10px 15px rgba(0,0,0,0.2), 0 4px 6px rgba(0,0,0,0.15); transform: translateY(-8px); } /* Enhanced hover shadow for dark */
 
-        /* Text & Background Gradients */
         .gradient-text { background: linear-gradient(90deg, var(--orange-primary) 0%, var(--orange-secondary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .gradient-bg { background: linear-gradient(135deg, var(--orange-primary) 0%, var(--orange-secondary) 100%); }
-        /* *** ADDED BLUE GRADIENT CLASS *** */
-        .gradient-bg-blue { background: linear-gradient(135deg, var(--blue-primary) 0%, var(--blue-secondary) 100%); }
 
-        /* Custom Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--orange-primary); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: var(--bg-secondary-light); border-radius: 4px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-track { background: var(--bg-secondary-dark); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--orange-primary); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--orange-secondary); }
 
-        /* Status Badge */
-        .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; transition: background-color 0.3s, color 0.3s; }
+        .status-badge.good-status { background-color: #D1FAE5; color: #065F46; }
+        .status-badge.moderate-status { background-color: #FEF3C7; color: #92400E; }
+        .status-badge.unhealthy-sensitive-status { background-color: #FFEDD5; color: #9A3412; }
+        .status-badge.unhealthy-status { background-color: #FEE2E2; color: #991B1B; }
+        .status-badge.very-unhealthy-status { background-color: #F3E8FF; color: #6B21A8; }
+        .status-badge.hazardous-status { background-color: #FEE2E2; color: #7F1D1D; }
+        .status-badge.nodata-status { background-color: #F3F4F6; color: #4B5563; }
+        .dark .status-badge.good-status { background-color: #052e16; color: #6ee7b7; }
+        .dark .status-badge.moderate-status { background-color: #422006; color: #fcd34d; }
+        .dark .status-badge.unhealthy-sensitive-status { background-color: #431407; color: #fb923c; }
+        .dark .status-badge.unhealthy-status { background-color: #450a0a; color: #f87171; }
+        .dark .status-badge.very-unhealthy-status { background-color: #3b0764; color: #c084fc; }
+        .dark .status-badge.hazardous-status { background-color: #450a0a; color: #fda4af; }
+        .dark .status-badge.nodata-status { background-color: #374151; color: #D1D5DB; }
 
-        /* Header Style */
-        .glass-effect { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.85); border-bottom: 1px solid rgba(230, 230, 230, 0.7); }
-        .animated-gradient-bg { background: linear-gradient(-45deg, #FFFFFF, #F5F7FA, #FEFEFE, #F0F2F5); background-size: 400% 400%; animation: gradientBG 20s ease infinite; }
-        @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .grid-pattern { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.02) 1px, transparent 1px); }
-        .shimmer { position: relative; overflow: hidden; background-color: #e2e8f0; }
-        .shimmer::after { content: ''; position: absolute; top: 0; left: -150%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent); animation: shimmer-animation 1.5s infinite; }
-        @keyframes shimmer-animation { 0% { left: -150%; } 100% { left: 150%; } }
-        .shimmer span, .shimmer p, .shimmer div { opacity: 0.5; }
+        .glass-effect {
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            background: var(--header-bg-light);
+            border-bottom: 1px solid var(--header-border-light);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .dark .glass-effect {
+            background: var(--header-bg-dark);
+            border-bottom: 1px solid var(--header-border-dark);
+        }
+
+        .text-gray-800 { color: var(--text-primary-light); }
+        .dark .text-gray-800 { color: var(--text-primary-dark); }
+        h2.text-gray-800, h3.text-gray-800 { color: var(--text-primary-light); }
+        .dark h2.text-gray-800, .dark h3.text-gray-800 { color: var(--text-primary-dark); }
+        .text-gray-600 { color: var(--text-secondary-light); }
+        .dark .text-gray-600 { color: var(--text-secondary-dark); }
+        .text-gray-500 { color: var(--text-muted-light); }
+        .dark .text-gray-500 { color: var(--text-secondary-dark); }
+        .text-gray-400 { color: #9CA3AF; }
+        .dark .text-gray-400 { color: var(--text-muted-dark); }
+        .text-blue-600 { color: var(--blue-primary); }
+        .dark .text-blue-600 { color: var(--blue-secondary); }
+        .border-gray-100 { border-color: var(--border-color-light); }
+        .dark .border-gray-100 { border-color: var(--border-color-dark); }
+
+        .time-range-btn { transition: background-color 0.2s, color 0.2s; }
+        .time-range-btn.bg-gray-100 { background-color: #F3F4F6; color: #4B5563; }
+        .dark .time-range-btn.bg-gray-100 { background-color: var(--button-bg-dark); color: var(--text-secondary-dark); }
+        .time-range-btn.bg-gray-100:hover { background-color: #E5E7EB; }
+        .dark .time-range-btn.bg-gray-100:hover { background-color: var(--button-hover-bg-dark); }
+
+        .dark .bg-white {
+            background-color: var(--button-bg-dark) !important;
+            border-color: var(--border-color-dark) !important;
+        }
+        .dark #current-time { color: var(--text-secondary-dark) !important; }
+        .dark #dark-mode-toggle svg { color: var(--icon-color-dark) !important; }
+
+        footer.bg-white { background-color: var(--bg-secondary-light); border-top: 1px solid var(--border-color-light); }
+        .dark footer.bg-white { background-color: var(--bg-secondary-dark); border-top-color: var(--border-color-dark); }
+
+        .dark .leaflet-bar a,
+        .dark .leaflet-bar a:hover {
+            background-color: var(--leaflet-control-bg-dark) !important;
+            color: var(--leaflet-control-text-dark) !important;
+            border-bottom-color: var(--border-color-dark) !important;
+        }
+        .dark .leaflet-bar a:hover { background-color: var(--button-hover-bg-dark) !important; }
+        .dark .leaflet-bar a.leaflet-disabled {
+            background-color: var(--leaflet-control-bg-dark) !important;
+            color: var(--text-muted-dark) !important;
+        }
+        .dark .leaflet-control-attribution {
+            background: var(--leaflet-attribution-bg-dark) !important;
+            color: var(--leaflet-attribution-text-dark) !important;
+        }
+        .dark .leaflet-control-attribution a { color: var(--blue-secondary) !important; }
+        .dark .leaflet-control-layers {
+            background: var(--leaflet-control-bg-dark) !important;
+            color: var(--leaflet-control-text-dark) !important;
+            border: 1px solid var(--border-color-dark);
+        }
     </style>
+    
     <script>
-        tailwind.config = { theme: { extend: { colors: { orange: { primary: '#FF7A00', secondary: '#FFB766' }, blue: { primary: '#3B82F6', secondary: '#60A5FA' } } } } } // Added blue colors
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { orange: { primary: '#FF7A00', secondary: '#FFB766' }, blue: { primary: '#3B82F6', secondary: '#60A5FA' }}}}
+        }
     </script>
 </head>
-<body class="min-h-screen animated-gradient-bg custom-scrollbar grid-pattern">
+<body class="min-h-screen custom-scrollbar">
     <div id="error-message"></div>
 
     <header class="sticky top-0 z-40 glass-effect shadow-sm">
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
              <div class="flex items-center space-x-3">
-                 <div class="h-12 w-12 flex-shrink-0 overflow-hidden bg-white p-1 rounded-md shadow-sm"> <img src="images/Logo_of_Tishk_International_University.png" alt="Tishk International University Logo" class="h-full w-full object-contain"> </div>
-                 <div> <h1 class="text-xl font-bold gradient-text mb-0">AirQuality</h1> <p class="text-xs text-gray-500 -mt-1">Tishk International University</p> </div>
+                 <div class="h-12 w-12 flex-shrink-0 overflow-hidden bg-white p-1 rounded-md shadow-sm">
+                     <img src="images/Logo_of_Tishk_International_University.png" alt="Tishk International University Logo" class="h-full w-full object-contain">
+                 </div>
+                 <div>
+                     <h1 class="text-xl font-bold gradient-text mb-0">AirQuality</h1>
+                     <p class="text-xs text-gray-500 -mt-1">Tishk International University</p>
+                 </div>
              </div>
              <div class="flex items-center space-x-3">
-                 <div class="bg-white px-3 py-1.5 rounded-lg text-xs text-gray-600 hidden md:block shadow-sm border border-gray-100"> <span id="current-time">Loading...</span> </div>
-                 <button id="refresh-btn" class="p-2 rounded-lg bg-white hover:bg-gray-100 transition-colors duration-200 shadow-sm border border-gray-100" title="Refresh Data"> <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> </button>
+                 <div class="bg-white px-3 py-1.5 rounded-lg text-xs text-gray-600 hidden md:block shadow-sm border border-gray-100">
+                     <span id="current-time">Loading...</span>
+                 </div>
+                 <button id="dark-mode-toggle" class="p-2 rounded-lg bg-white hover:bg-gray-100 transition-colors duration-200 shadow-sm border border-gray-100" title="Toggle Dark Mode">
+                    <svg id="theme-toggle-dark-icon" class="hidden h-5 w-5 text-gray-700" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                    <svg id="theme-toggle-light-icon" class="hidden h-5 w-5 text-gray-700" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 5.05A1 1 0 003.636 3.636l-.707.707a1 1 0 101.414 1.414l.707-.707zM3 11a1 1 0 100-2H2a1 1 0 100 2h1zM13 17a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM4.95 14.95A1 1 0 006.364 16.364l.707-.707a1 1 0 00-1.414-1.414l-.707.707z"></path></svg>
+                 </button>
              </div>
         </div>
     </header>
@@ -107,58 +239,56 @@
         </div>
 
         <section class="mb-6">
-            <div class="mb-6">
-                 <h2 class="text-2xl font-semibold text-gray-800 mb-3">Makhmor Road <span class="gradient-text">Sensor</span></h2>
-                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="neo-card hover-lift p-5">
-                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3><div class="h-8 w-8 rounded-full gradient-bg flex items-center justify-center text-white shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></div></div>
-                        <div class="flex items-baseline mb-1"><span id="makhmor-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
-                        <span id="makhmor-air-quality-status" class="status-badge bg-gray-100 text-gray-600">Loading...</span><p id="makhmor-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
-                    </div>
-                    <div class="neo-card hover-lift p-5">
-                         <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-orange-secondary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
-                         <div class="flex items-baseline"><span id="makhmor-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div><p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
-                    </div>
-                    <div class="neo-card hover-lift p-5">
-                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-orange-primary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
-                        <p id="makhmor-last-updated" class="text-lg font-semibold text-gray-800">--</p><p id="makhmor-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
-                    </div>
-                    <div class="neo-card hover-lift p-5">
-                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-orange-secondary/20 flex items-center justify-center text-orange-secondary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
-                        <span id="makhmor-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span><p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
-                    </div>
-                 </div>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-3">Makhmor Road <span class="gradient-text">Sensor</span></h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3><div class="h-8 w-8 rounded-full gradient-bg flex items-center justify-center text-white shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></div></div>
+                    <div class="flex items-baseline mb-1"><span id="makhmor-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
+                    <span id="makhmor-air-quality-status" class="status-badge nodata-status">Loading...</span>
+                    <p id="makhmor-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-orange-primary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                    <div class="flex items-baseline"><span id="makhmor-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
+                    <p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-orange-primary/20 flex items-center justify-center text-orange-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                    <p id="makhmor-last-updated" class="text-lg font-semibold text-gray-800">--</p>
+                    <p id="makhmor-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-orange-secondary/20 flex items-center justify-center text-orange-secondary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
+                    <span id="makhmor-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span>
+                    <p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
+                </div>
             </div>
-             <div class="mb-6">
-                 <h2 class="text-2xl font-semibold text-gray-800 mb-3">Naznaz Area <span class="gradient-text">Sensor</span></h2>
-                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                     <div class="neo-card hover-lift p-5">
-                         <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3>
-                             <div class="h-8 w-8 rounded-full gradient-bg-blue flex items-center justify-center text-white shadow-md">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                            </div>
-                         </div>
-                         <div class="flex items-baseline mb-1">
-                             <span id="naznaz-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span>
-                             <span class="text-sm text-gray-500">μg/m³</span>
-                         </div>
-                         <span id="naznaz-air-quality-status" class="status-badge bg-gray-100 text-gray-600">Loading...</span>
-                         <p id="naznaz-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
-                     </div>
-                     <div class="neo-card hover-lift p-5">
-                         <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
-                         <div class="flex items-baseline"><span id="naznaz-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div><p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
-                     </div>
-                     <div class="neo-card hover-lift p-5">
-                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
-                        <p id="naznaz-last-updated" class="text-lg font-semibold text-gray-800">--</p><p id="naznaz-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
-                    </div>
-                    <div class="neo-card hover-lift p-5">
-                        <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
-                        <span id="naznaz-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span><p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
-                    </div>
-                 </div>
+        </section>
+
+        <section class="mb-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-3">Naznaz Area <span class="gradient-text">Sensor</span></h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Current PM2.5</h3><div class="h-8 w-8 rounded-full gradient-bg-blue flex items-center justify-center text-white shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></div></div>
+                    <div class="flex items-baseline mb-1"><span id="naznaz-current-pm25" class="text-4xl font-bold gradient-text mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
+                    <span id="naznaz-air-quality-status" class="status-badge nodata-status">Loading...</span>
+                    <p id="naznaz-status-time" class="text-xs text-gray-400 mt-2">Updating...</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">24hr Average</h3><div class="h-8 w-8 rounded-full bg-blue-primary/20 flex items-center justify-center text-blue-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                    <div class="flex items-baseline"><span id="naznaz-average-pm25" class="text-3xl font-bold text-gray-800 mr-1">--</span><span class="text-sm text-gray-500">μg/m³</span></div>
+                    <p class="text-xs text-gray-400 mt-2">Average over the last 24 hours</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Last Updated</h3><div class="h-8 w-8 rounded-full bg-blue-primary/20 flex items-center justify-center text-blue-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div></div>
+                    <p id="naznaz-last-updated" class="text-lg font-semibold text-gray-800">--</p>
+                    <p id="naznaz-time-ago" class="text-sm text-gray-500 mt-1">Loading...</p>
+                </div>
+                <div class="neo-card hover-lift p-5">
+                    <div class="flex items-center justify-between mb-3"><h3 class="text-xs uppercase tracking-wider text-gray-500">Sensor Status</h3><div class="h-8 w-8 rounded-full bg-blue-primary/20 flex items-center justify-center text-blue-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" /></svg></div></div>
+                    <span id="naznaz-sensor-status" class="text-xl font-bold text-gray-500">Unknown</span>
+                    <p class="text-xs text-gray-400 mt-2">Sensor connection status</p>
+                </div>
             </div>
         </section>
 
@@ -192,101 +322,246 @@
         <section class="mb-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="neo-card p-5">
-                     <div class="flex justify-between items-start mb-3"><div><h3 class="text-lg font-semibold text-gray-800" id="location1-name">Makhmor Road</h3><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div></div><p class="text-sm text-gray-500" id="location1-timestamp">--:--</p></div>
-                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4><div class="grid grid-cols-3 gap-2 text-center"><div><span class="block text-sm font-semibold text-gray-700" id="location1-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div><div><span class="block text-sm font-semibold text-gray-700" id="location1-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div><div><span class="block text-sm font-semibold text-gray-700" id="location1-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div></div></div>
-                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4><div id="location1-prediction" class="text-sm text-blue-600">Loading...</div></div>
+                     <div class="flex justify-between items-start mb-3">
+                         <div>
+                             <h3 class="text-lg font-semibold text-gray-800" id="location1-name">Makhmor Road</h3>
+                             <div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div>
+                             <div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="location1-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div>
+                         </div>
+                         <p class="text-sm text-gray-500" id="location1-timestamp">--:--</p>
+                    </div>
+                     <div class="mt-3 pt-3 border-t border-gray-100">
+                         <h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4>
+                         <div class="grid grid-cols-3 gap-2 text-center">
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="location1-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div>
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="location1-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div>
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="location1-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div>
+                         </div>
+                     </div>
+                     <div class="mt-3 pt-3 border-t border-gray-100">
+                         <h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4>
+                         <div id="location1-prediction" class="text-sm text-blue-600">Loading...</div>
+                     </div>
                  </div>
                  <div class="neo-card p-5">
-                     <div class="flex justify-between items-start mb-3"><div><h3 class="text-lg font-semibold text-gray-800" id="naznaz-name">Naznaz Area</h3><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div><div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div></div><p class="text-sm text-gray-500" id="naznaz-timestamp">--:--</p></div>
-                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4><div class="grid grid-cols-3 gap-2 text-center"><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div><div><span class="block text-sm font-semibold text-gray-700" id="naznaz-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div></div></div>
-                     <div class="mt-3 pt-3 border-t border-gray-100"><h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4><div id="naznaz-prediction" class="text-sm text-blue-600">Loading...</div></div>
+                     <div class="flex justify-between items-start mb-3">
+                         <div>
+                             <h3 class="text-lg font-semibold text-gray-800" id="naznaz-name">Naznaz Area</h3>
+                             <div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-pm25">--</span><span class="ml-1 text-sm text-gray-500">μg/m³ PM2.5</span></div>
+                             <div class="flex items-baseline mt-1"><span class="text-2xl font-bold text-gray-800" id="naznaz-humidity">--</span><span class="ml-1 text-sm text-gray-500">% Humidity</span></div>
+                         </div>
+                         <p class="text-sm text-gray-500" id="naznaz-timestamp">--:--</p>
+                     </div>
+                     <div class="mt-3 pt-3 border-t border-gray-100">
+                         <h4 class="text-xs uppercase text-gray-500 mb-2">Averages</h4>
+                         <div class="grid grid-cols-3 gap-2 text-center">
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="naznaz-24h-avg">--</span><span class="text-xs text-gray-400">24h</span></div>
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="naznaz-7d-avg">--</span><span class="text-xs text-gray-400">7d</span></div>
+                             <div><span class="block text-sm font-semibold text-gray-700 dark:text-gray-300" id="naznaz-30d-avg">--</span><span class="text-xs text-gray-400">30d</span></div>
+                         </div>
+                     </div>
+                     <div class="mt-3 pt-3 border-t border-gray-100">
+                         <h4 class="text-xs uppercase text-gray-500 mb-1">Prediction</h4>
+                         <div id="naznaz-prediction" class="text-sm text-blue-600">Loading...</div>
+                     </div>
                  </div>
             </div>
         </section>
-
-        </main>
+    </main>
 
     <footer class="bg-white border-t border-gray-100 mt-8 shadow-sm">
         <div class="container mx-auto px-4 py-5 text-center">
-            <p class="text-sm text-gray-500">&copy; 2025 Air Quality Monitoring System - Tishk International University</p>
+            <p class="text-sm text-gray-500">&copy; <span id="current-year">2025</span> Air Quality Monitoring System - Tishk International University</p>
         </div>
     </footer>
 
     <script src="db-config.js"></script>
     <script src="sensor-status.js"></script>
     <script src="app.js"></script>
-
     <script>
-        // --- LEAFLET MAP INITIALIZATION FOR TWO MAPS ---
-        let maps = { makhmor: null, naznaz: null };
-        const mapMarkers = { makhmor: null, naznaz: null };
+        var maps = { makhmor: null, naznaz: null };
+        var mapMarkers = { makhmor: null, naznaz: null };
         const mapLocations = {
             makhmor: { name: "Makhmor Road", center: [36.112146, 43.953925], color: "#FF7A00", id: "makhmor-road", mapDivId: "makhmor-map", polygon: [[36.131336, 43.955878],[36.127069, 43.935050],[36.112558, 43.928211],[36.092654, 43.936422],[36.087244, 43.967664],[36.095914, 43.982169],[36.118589, 43.990409],[36.133590, 43.986449],[36.136186, 43.971241]] },
             naznaz: { name: "Naznaz Area", center: [36.213724, 43.988080], color: "#3B82F6", id: "naznaz-area", mapDivId: "naznaz-map", polygon: [[36.195884, 43.993956],[36.200586, 43.975506],[36.202055, 43.961425],[36.216648, 43.970165],[36.222622, 43.994927],[36.218776, 44.011252],[36.203788, 44.013599]] }
         };
+        // makhmorRoadData and naznazAreaData are declared and populated in app.js
+        // and will be accessed by functions like createPopupContentForMap and updateMapData.
+        var currentTileLayers = { makhmor: null, naznaz: null };
+
+        function getTileLayer(isDarkMode) {
+            if (isDarkMode) {
+                return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd',
+                    maxZoom: 19
+                });
+            } else {
+                return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                });
+            }
+        }
 
         function initMaps() {
+            if (typeof L === 'undefined') { console.error("Leaflet (L) not defined. Maps cannot be initialized."); return; }
+            const isDarkMode = document.documentElement.classList.contains('dark');
+
             Object.entries(mapLocations).forEach(([key, location]) => {
                 try {
-                    const mapDiv = document.getElementById(location.mapDivId); if (!mapDiv) { console.error(`Map container '${location.mapDivId}' not found.`); return; }
+                    const mapContainerElement = document.getElementById(location.mapDivId);
+                    if (!mapContainerElement) { console.error(`Map container '${location.mapDivId}' not found.`); return; }
+                    
+                    if (maps[key]) { // If map already exists, remove it before reinitializing
+                        maps[key].remove();
+                        maps[key] = null;
+                    }
+
                     maps[key] = L.map(location.mapDivId).setView(location.center, 12);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(maps[key]);
-                    const polygon = L.polygon(location.polygon, { color: location.color, weight: 1.5, fillColor: location.color, fillOpacity: 0.2, className: 'location-area' }).addTo(maps[key]);
-                    location.polygonRef = polygon;
-                    const marker = createOrUpdateMarker(location, null); mapMarkers[key] = marker; marker.addTo(maps[key]);
-                    marker.bindPopup(() => createPopupContentForMap(location), { className: 'location-popup', offset: [0, -30] });
-                    console.log(`${location.name} map initialized.`);
-                } catch (error) {
-                    console.error(`Error initializing ${location.name} map:`, error);
-                    const mapDiv = document.getElementById(location.mapDivId); if (mapDiv) mapDiv.innerHTML = `<p class="text-center text-red-500 p-4">Error loading map: ${error.message}</p>`;
-                }
+                    currentTileLayers[key] = getTileLayer(isDarkMode);
+                    currentTileLayers[key].addTo(maps[key]);
+
+                    L.polygon(location.polygon, { color: location.color, weight: 1.5, fillColor: location.color, fillOpacity: 0.2, className: 'location-area' }).addTo(maps[key]);
+                    
+                    // Create marker (it will use fallback if getAirQualityStatus is not yet available, then updateMapData will refresh it)
+                    mapMarkers[key] = createOrUpdateMarker(location, null); // Create the marker object
+                    if(mapMarkers[key]) { // Ensure marker was created
+                        mapMarkers[key].addTo(maps[key]); // Add to map
+                        mapMarkers[key].bindPopup(() => createPopupContentForMap(location), { className: 'location-popup', offset: [0, -30] });
+                    }
+
+                } catch (error) { console.error(`Error initializing ${location.name} map:`, error); }
             });
         }
 
+        window.updateMapTheme = function() {
+            if (typeof L === 'undefined' || !maps.makhmor || !maps.naznaz) return;
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            Object.keys(maps).forEach(key => {
+                if (maps[key]) {
+                    if (currentTileLayers[key]) {
+                        maps[key].removeLayer(currentTileLayers[key]);
+                    }
+                    currentTileLayers[key] = getTileLayer(isDarkMode);
+                    currentTileLayers[key].addTo(maps[key]);
+                }
+            });
+            console.log("Map themes updated for dark/light mode.");
+        };
+
         function createOrUpdateMarker(location, reading) {
-             const pm25Value = (reading && reading.pm25 !== null) ? parseFloat(reading.pm25) : null; const status = getAirQualityStatus(pm25Value);
-             const iconHtml = `<div style="background-color: ${status.color}; border: 1px solid rgba(0,0,0,0.2);" class="w-8 h-8 rounded-full flex items-center justify-center shadow-lg"><span class="text-white font-bold text-xs">${pm25Value !== null ? pm25Value.toFixed(0) : '--'}</span></div><div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid ${status.color}; margin: auto; position: relative; top: -1px;"></div>`;
-             const customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [32, 40], iconAnchor: [16, 40] });
-             const mapKey = location.id === 'makhmor-road' ? 'makhmor' : 'naznaz'; const marker = mapMarkers[mapKey];
-             if (marker) { marker.setIcon(customIcon); return marker; } else { return L.marker(location.center, { icon: customIcon }); }
-         }
+            // Ensure getAirQualityStatus is available (from app.js)
+            const isGetAirQualityStatusDefined = typeof getAirQualityStatus === 'function';
+            
+            const pm25Value = (reading && reading.pm25 !== null) ? parseFloat(reading.pm25) : null;
+            let status;
+            if (isGetAirQualityStatusDefined) {
+                status = getAirQualityStatus(pm25Value);
+            } else {
+                // Fallback status if getAirQualityStatus is not defined (e.g. app.js not fully loaded)
+                status = { status: 'Loading...', color: (document.documentElement.classList.contains('dark') ? '#374151' : '#A0AEC0') }; 
+            }
 
-         function createPopupContentForMap(location) {
-             const internalId = location.id; const reading = internalId === 'makhmor-road' ? (makhmorRoadData.length > 0 ? makhmorRoadData[0] : null) : (naznazAreaData.length > 0 ? naznazAreaData[0] : null);
-             const popup = L.DomUtil.create('div', 'location-popup-content'); const title = L.DomUtil.create('div', 'location-popup-title', popup); title.textContent = location.name;
-             if (!reading) { L.DomUtil.create('div', 'text-sm text-gray-500 mt-1', popup).textContent = 'No current data.'; return popup; }
-             const pm25Value = reading.pm25 !== null ? parseFloat(reading.pm25) : null; const timestamp = reading.timestamp instanceof Date ? reading.timestamp : new Date(reading.timestamp); const status = getAirQualityStatus(pm25Value);
-             const value = L.DomUtil.create('div', 'location-popup-value', popup); value.style.color = status.color; value.textContent = pm25Value !== null ? `${pm25Value.toFixed(1)} μg/m³` : '-- μg/m³';
-             const statusText = L.DomUtil.create('div', 'location-popup-status', popup); statusText.textContent = `Status: ${status.status}`;
-             const timestampDiv = L.DomUtil.create('div', 'location-popup-time', popup);
-             if (timestamp instanceof Date && !isNaN(timestamp)) { timestampDiv.textContent = `Updated: ${getTimeAgo(timestamp)}`; } else { timestampDiv.textContent = 'Updated: Invalid time'; }
-             return popup;
-         }
+            const markerColor = status.color || (document.documentElement.classList.contains('dark') ? '#374151' : '#A0AEC0'); // Fallback color
+            const iconHtml = `<div style="background-color:${markerColor};border:1px solid rgba(0,0,0,0.2);" class="w-8 h-8 rounded-full flex items-center justify-center shadow-lg"><span class="text-white font-bold text-xs">${pm25Value !== null ? pm25Value.toFixed(0) : '--'}</span></div><div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${markerColor};margin:auto;position:relative;top:-1px;"></div>`;
+            const customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [32, 40], iconAnchor: [16, 40] });
+            
+            const mapKey = location.id === 'makhmor-road' ? 'makhmor' : 'naznaz';
 
-        function updateMapData() {
-             console.log("Attempting to update map markers...");
-             Object.entries(mapLocations).forEach(([key, location]) => {
-                 const mapInstance = maps[key]; const markerInstance = mapMarkers[key]; const internalId = location.id;
-                 if (!mapInstance || !markerInstance) { console.warn(`Map or marker instance not found for ${key}. Skipping update.`); return; }
-                 const latestReading = internalId === 'makhmor-road' ? (makhmorRoadData.length > 0 ? makhmorRoadData[0] : null) : (naznazAreaData.length > 0 ? naznazAreaData[0] : null);
-                 createOrUpdateMarker(location, latestReading);
-                 if (markerInstance.isPopupOpen()) { markerInstance.setPopupContent(createPopupContentForMap(location)); }
-             });
-             console.log("Map markers updated.");
+            if (mapMarkers[mapKey]) { // If marker exists, just update its icon
+                mapMarkers[mapKey].setIcon(customIcon);
+                return mapMarkers[mapKey];
+            } else { // Otherwise, create a new marker
+                if (typeof L !== 'undefined' && L.marker) {
+                   return L.marker(location.center, { icon: customIcon });
+                }
+                return null; // Leaflet not available to create marker
+            }
         }
-        window.updateMapData = updateMapData;
 
-        if (typeof L !== 'undefined') { initMaps(); } else {
-            console.error("Leaflet library not loaded. Maps cannot be initialized.");
-            document.getElementById('makhmor-map').innerHTML = '<p class="text-center text-red-500 p-4">Error loading map library.</p>';
-            document.getElementById('naznaz-map').innerHTML = '<p class="text-center text-red-500 p-4">Error loading map library.</p>';
+        function createPopupContentForMap(location) {
+            if (typeof getAirQualityStatus !== 'function' || typeof getTimeAgo !== 'function') { 
+                const div = L.DomUtil.create('div');
+                div.innerHTML = `${location.name}<br/>Data functions not available.`;
+                return div;
+            }
+            const dataArray = location.id === 'makhmor-road' ? window.makhmorRoadData : window.naznazAreaData; // Ensure using global data
+            const reading = dataArray && dataArray.length > 0 ? dataArray[0] : null;
+            
+            const popup = L.DomUtil.create('div', 'location-popup-content');
+            L.DomUtil.create('div', 'location-popup-title', popup).textContent = location.name;
+
+            if (!reading) { 
+                L.DomUtil.create('div', 'text-sm mt-1', popup).textContent = 'No current data.'; 
+                return popup; 
+            }
+
+            const pm25Value = reading.pm25 !== null ? parseFloat(reading.pm25) : null;
+            const status = getAirQualityStatus(pm25Value);
+            const valueEl = L.DomUtil.create('div', 'location-popup-value', popup);
+            valueEl.style.color = status.color || '#F97316'; 
+            valueEl.textContent = pm25Value !== null ? `${pm25Value.toFixed(1)} μg/m³` : '-- μg/m³';
+            
+            L.DomUtil.create('div', 'location-popup-status', popup).textContent = `Status: ${status.status}`;
+            const tsEl = L.DomUtil.create('div', 'location-popup-time', popup);
+            tsEl.textContent = reading.timestamp instanceof Date && !isNaN(reading.timestamp) ? `Updated: ${getTimeAgo(reading.timestamp)}` : 'Updated: Invalid time';
+            
+            return popup;
         }
+
+        window.updateMapData = function() {
+            if (typeof L === 'undefined' || typeof getAirQualityStatus !== 'function') { return; }
+            Object.entries(mapLocations).forEach(([key, location]) => {
+                if (!maps[key]) return; // Ensure map for this key is initialized
+
+                const dataArray = location.id === 'makhmor-road' ? window.makhmorRoadData : window.naznazAreaData; // Ensure using global data
+                const latestReading = dataArray && dataArray.length > 0 ? dataArray[0] : null;
+                
+                if (mapMarkers[key]) { // If marker exists, update it
+                    createOrUpdateMarker(location, latestReading); // This will update icon
+                     if (mapMarkers[key].isPopupOpen()) { // Refresh popup content if open
+                        mapMarkers[key].setPopupContent(createPopupContentForMap(location));
+                    }
+                } else { // If marker doesn't exist (e.g., initial setup failed partially but map exists)
+                    mapMarkers[key] = createOrUpdateMarker(location, latestReading);
+                    if(mapMarkers[key]) {
+                        mapMarkers[key].addTo(maps[key]);
+                        mapMarkers[key].bindPopup(() => createPopupContentForMap(location), { className: 'location-popup', offset: [0, -30] });
+                    }
+                }
+            });
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() { 
+                if (typeof L !== 'undefined') { 
+                    initMaps(); 
+                }
+                else {
+                    console.error("Leaflet not loaded. Maps failed.");
+                    ['makhmor-map', 'naznaz-map'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerHTML = '<p class="text-center text-red-500 p-4">Error loading map library.</p>';
+                    });
+                }
+            }, 250); // Slightly increased delay for safety
+        });
     </script>
 
-     <script>
-        function updateCurrentTime() { const timeElement = document.getElementById('current-time'); if (timeElement) { const now = new Date(); const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }; timeElement.textContent = now.toLocaleString('en-US', options); } }
-        updateCurrentTime(); setInterval(updateCurrentTime, 60000);
+    <script>
+        function updateCurrentTime() {
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                const now = new Date();
+                const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+                timeElement.textContent = now.toLocaleString('en-US', options);
+            }
+            const yearElement = document.getElementById('current-year');
+            if (yearElement) yearElement.textContent = new Date().getFullYear();
+        }
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 60000);
     </script>
-
 </body>
 </html>
