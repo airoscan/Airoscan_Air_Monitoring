@@ -39,3 +39,5 @@ out/
 # Accidental files
 "how origin  grep HEAD branch"
 "ter main" 
+# Local Netlify folder
+.netlify
