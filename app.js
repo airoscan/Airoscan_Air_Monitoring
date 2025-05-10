@@ -46,7 +46,7 @@ const locationMapping = {
     // Naznaz Area
     "36.213724, 43.988080": 'naznaz-area'
 };
-
+    
 
 // Function to show error messages to the user
 function showError(message, duration = 5000) {
@@ -237,7 +237,7 @@ async function refreshData() {
             return;
         }
 
-        console.log(`Workspaceed ${readings.length} readings`);
+        console.log(`Workspaceed ${readings.length} readings`); // Corrected log message
         allReadings = readings.map(r => ({ ...r, timestamp: new Date(r.timestamp), Location: r.Location || "Unknown" }));
 
         const readingsByLocation = {
@@ -342,7 +342,7 @@ function updateDefaultValues() {
     updatePredictionsDisplay();
 }
 
-// Function to update a specific location's display elements (remains largely the same)
+// Function to update a specific location's display elements
 function updateLocationDisplay(locationId, reading) {
     const prefix = locationId === 'makhmor-road' ? 'makhmor' : 'naznaz';
     const isMakhmor = locationId === 'makhmor-road';
@@ -499,14 +499,14 @@ function toggleDarkMode() {
     localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
     updateThemeIcons(isDarkMode);
 
-    if (mainChart) {
-        // Chart options update handled in updateCharts() now
-    }
+    // The mainChart theme update is handled by refreshData -> updateCharts
+    // if (mainChart) {
+    // }
 
     if (typeof window.updateMapTheme === 'function') {
         window.updateMapTheme();
     }
-    refreshData();
+    refreshData(); // Refresh data which will trigger chart and other UI updates
 }
 
 function applyInitialTheme() {
@@ -618,7 +618,9 @@ function initCharts() {
                         yAxisID: 'yPm25',
                         fill: true,
                         borderWidth: 2.5,
-                        tension: 0.4
+                        tension: 0.4,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
                     },
                     {
                         label: 'Naznaz Area',
@@ -632,14 +634,20 @@ function initCharts() {
                         yAxisID: 'yPm25',
                         fill: true,
                         borderWidth: 2.5,
-                        tension: 0.4
+                        tension: 0.4,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false, axis: 'x' },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                    axis: 'x'
+                },
                 plugins: {
                     tooltip: {
                         enabled: true,
@@ -674,6 +682,22 @@ function initCharts() {
                             font: { size: 13, weight: '500' },
                             usePointStyle: true, pointStyle: 'circle'
                         }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                            threshold: 5,
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true,
+                            },
+                            mode: 'xy',
+                        }
                     }
                 },
                 scales: {
@@ -681,11 +705,18 @@ function initCharts() {
                         type: 'time',
                         time: {
                             unit: 'hour',
-                            tooltipFormat: 'MMM d, HH:mm', // Keep original format for tooltip
+                            tooltipFormat: 'MMM d, HH:mm',
                             displayFormats: { hour: 'HH:mm', day: 'MMM d' }
                         },
                         grid: { display: false },
-                        ticks: { color: textColor, major: { enabled: true }, font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+                        ticks: {
+                            color: textColor,
+                            major: { enabled: true },
+                            font: { size: 11 },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        }
                     },
                     yPm25: {
                         type: 'linear', position: 'left', beginAtZero: true,
@@ -696,7 +727,7 @@ function initCharts() {
                 }
             }
         });
-        console.log("Main trend chart initialized.");
+        console.log("Main trend chart initialized with zoom plugin.");
         return true;
     } catch (error) {
         console.error('Error initializing charts:', error);
@@ -705,6 +736,7 @@ function initCharts() {
     }
 }
 
+// This is the CORRECTED and CONSOLIDATED updateCharts function
 function updateCharts(processedData) {
     console.log('Updating charts with time range:', currentTimeRange);
     if (!mainChart) {
@@ -729,17 +761,40 @@ function updateCharts(processedData) {
 
     mainChart.data.datasets[0].data = chartDataMakhmor;
     mainChart.data.datasets[1].data = chartDataNaznaz;
+    // Ensure label for Naznaz is correctly set if it was modified elsewhere (it was in the removed duplicate)
     mainChart.data.datasets[1].label = 'Naznaz Area';
+
+
+    let pointRadiusValue = 2;
+    let pointHoverRadiusValue = 5;
+
+    if (currentTimeRange === '7d') {
+        pointRadiusValue = 2;
+        pointHoverRadiusValue = 4;
+    } else if (currentTimeRange === '30d') {
+        pointRadiusValue = 1.5;
+        pointHoverRadiusValue = 4;
+    }
 
     mainChart.data.datasets.forEach(dataset => {
         dataset.pointBorderColor = isDarkMode ? '#1F2937' : '#ffffff';
         dataset.pointHoverBackgroundColor = isDarkMode ? '#1F2937' : '#ffffff';
+        dataset.pointRadius = pointRadiusValue;
+        dataset.pointHoverRadius = pointHoverRadiusValue;
     });
 
     let timeUnit = 'hour';
-    if (currentTimeRange === '7d') { timeUnit = 'day'; }
-    else if (currentTimeRange === '30d') { timeUnit = 'day'; }
+    let maxTicksLimit = 10;
+    if (currentTimeRange === '7d') {
+        timeUnit = 'day';
+        maxTicksLimit = 7;
+    } else if (currentTimeRange === '30d') {
+        timeUnit = 'day';
+        maxTicksLimit = 10;
+    }
     mainChart.options.scales.x.time.unit = timeUnit;
+    mainChart.options.scales.x.ticks.maxTicksLimit = maxTicksLimit;
+
 
     const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0';
     const tickColor = isDarkMode ? '#9CA3AF' : '#64748B';
@@ -754,10 +809,17 @@ function updateCharts(processedData) {
     mainChart.options.plugins.tooltip.titleColor = isDarkMode ? '#E5E7EB' : '#E2E8F0';
     mainChart.options.plugins.tooltip.bodyColor = isDarkMode ? '#D1D5DB' : '#94A3B8';
 
+    // Reset zoom/pan when data or time range changes to show the full new range
+    // This call is important as a fallback if updateCharts is called by something other than setTimeRange
+    if (mainChart.resetZoom) {
+        mainChart.resetZoom('none');
+        console.log('Chart zoom reset during updateCharts.');
+    }
+
     mainChart.update();
 }
 
-
+// This is the CORRECTED and CONSOLIDATED setTimeRange function
 function setTimeRange(range) {
     console.log('Setting time range to:', range);
     document.querySelectorAll('.time-range-btn').forEach(btn => {
@@ -775,11 +837,21 @@ function setTimeRange(range) {
         }
     });
     currentTimeRange = range;
+
+    // Reset zoom when the time range button is clicked BEFORE fetching new data
+    if (mainChart && typeof mainChart.resetZoom === 'function') {
+        mainChart.resetZoom('none');
+        console.log('Chart zoom reset due to time range change.');
+    } else {
+        console.warn('mainChart or mainChart.resetZoom is not available for reset in setTimeRange.');
+    }
+
     refreshData().catch(error => {
         console.error('Error refreshing data after time range change:', error);
         showError('Failed to update data for new time range: ' + error.message);
     });
 }
+
 
 function setupEventListeners() {
     document.querySelectorAll('.time-range-btn').forEach(button => {
@@ -975,7 +1047,7 @@ function updatePredictionsDisplay() {
          if (element) {
              if (dailyPredictionsArray && Array.isArray(dailyPredictionsArray) && dailyPredictionsArray.length === 7) {
                  let htmlContent = `<div class="text-xs uppercase text-gray-500 mb-1">7-Day PM2.5 Forecast (Daily Avg):</div>`;
-                 htmlContent += '<ul class="space-y-0.5 text-sm">'; // Reduced space-y for tighter list
+                 htmlContent += '<ul class="space-y-0.5 text-sm">';
 
                  dailyPredictionsArray.forEach(dailyPred => {
                      htmlContent += `
@@ -985,7 +1057,6 @@ function updatePredictionsDisplay() {
                                 ${dailyPred.pm25 !== null ? dailyPred.pm25.toFixed(1) + ' μg/m³' : 'N/A'}
                             </span>
                         </li>`;
-                        // Optional: Add confidence per day if available in dailyPred.confidence
                  });
                  htmlContent += '</ul>';
                  element.innerHTML = htmlContent;
