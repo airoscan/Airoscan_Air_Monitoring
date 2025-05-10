@@ -938,7 +938,7 @@
                     predictionElement.innerHTML = ''; // Clear previous content
 
                     let sectionTitleHTML = '';
-                    if (isNaznaz) {
+                    
                         sectionTitleHTML = `
                             <div class="prediction-section-title">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -946,11 +946,7 @@
                                 </svg>
                                 7-DAY PM2.5 FORECAST WITH CONFIDENCE
                             </div>`;
-                    } else {
-                         // Makhmor doesn't have the overall title in the image, just lists days.
-                         // If a title is desired for Makhmor too, it can be added here.
-                         // For now, adhering to the visual difference in the provided image.
-                    }
+                    
                     predictionElement.innerHTML = sectionTitleHTML;
 
 
