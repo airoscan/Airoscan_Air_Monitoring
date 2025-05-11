@@ -95,91 +95,136 @@ function calculateAverages(locationData) {
     return result;
 }
 
-// NEW: Function to calculate simple 7-day daily PM2.5 predictions
+// NEW (Replaces previous calculate7DayDailyPrediction):
+// Function to calculate 7-day daily PM2.5 predictions using a blend of
+// day-of-week averages and recent overall daily averages.
 function calculate7DayDailyPrediction(locationData) {
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today
     const predictionsArray = [];
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    // We need data from the past 7-14 days to get averages for each day of the *previous* week.
-    const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000);
-    const recentEnoughData = locationData.filter(r => r.timestamp instanceof Date && r.timestamp >= fourteenDaysAgo && r.pm25 !== null);
+    const HISTORICAL_DAYS_TO_CONSIDER = 21; // Use up to 3 weeks of daily averages
+    const RECENT_DAYS_FOR_OVERALL_AVG = 5;  // How many recent days for the general trend
+    const MIN_TOTAL_DAILY_DATAPOINTS = 5; // Min distinct past daily averages needed for a decent prediction
 
-    if (recentEnoughData.length < 7) { // Not enough data for a reliable day-of-week persistence
+    const WEIGHT_DOW = 0.6; // Weight for the day-of-week specific average
+    const WEIGHT_RECENT = 0.4; // Weight for the recent N-day average
+
+    // 1. Prepare historical daily averages map
+    const dailyAveragesMap = {}; // Stores {'YYYY-MM-DD': {sum, count, date, dayOfWeek, avgPm25}}
+    const historyStartDate = new Date(today.getTime() - HISTORICAL_DAYS_TO_CONSIDER * 24 * 60 * 60 * 1000);
+
+    locationData.forEach(r => {
+        if (r.timestamp instanceof Date && r.timestamp >= historyStartDate && r.timestamp < today && r.pm25 !== null && r.pm25 !== undefined) {
+            const recordDate = new Date(r.timestamp);
+            recordDate.setHours(0,0,0,0);
+            const dayKey = recordDate.toISOString().split('T')[0];
+
+            if (!dailyAveragesMap[dayKey]) {
+                dailyAveragesMap[dayKey] = {
+                    sum: 0,
+                    count: 0,
+                    date: recordDate,
+                    dayOfWeek: recordDate.getDay() // 0 for Sunday, 1 for Monday, etc.
+                };
+            }
+            dailyAveragesMap[dayKey].sum += parseFloat(r.pm25);
+            dailyAveragesMap[dayKey].count += 1;
+        }
+    });
+
+    // Calculate averages and convert to a sorted array
+    const sortedPastDailyAverages = Object.keys(dailyAveragesMap)
+        .map(key => {
+            const entry = dailyAveragesMap[key];
+            return {
+                date: entry.date,
+                avgPm25: entry.sum / entry.count,
+                dayOfWeek: entry.dayOfWeek
+            };
+        })
+        .sort((a, b) => a.date - b.date); // Sort chronologically (oldest to newest)
+
+    // Fallback if not enough distinct historical daily data points
+    if (sortedPastDailyAverages.length < MIN_TOTAL_DAILY_DATAPOINTS) {
+        let fallbackPm25 = null;
+        if (sortedPastDailyAverages.length > 0) {
+            fallbackPm25 = sortedPastDailyAverages[sortedPastDailyAverages.length - 1].avgPm25; // Use the last known daily average
+        } else if (locationData.length > 0 && locationData[0].pm25 !== null) { // locationData is sorted descending
+            fallbackPm25 = parseFloat(locationData[0].pm25); // Use the absolute latest raw reading
+        }
+
         for (let i = 0; i < 7; i++) {
             const targetDate = new Date(today);
-            targetDate.setDate(today.getDate() + i + 1); // +1 for tomorrow, +2 for day after, etc.
+            targetDate.setDate(today.getDate() + i + 1);
             predictionsArray.push({
                 dayName: dayNames[targetDate.getDay()],
                 date: targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}),
-                pm25: null,
-                confidence: 10 // Low confidence if not enough data
+                pm25: fallbackPm25 !== null ? Math.max(0, fallbackPm25) : null,
+                confidence: 10 // Low confidence for basic fallback
             });
         }
         return predictionsArray;
     }
 
-    // Calculate average PM2.5 for each of the past 7 distinct calendar days ending yesterday
-    const pastDailyAverages = {}; // Store as { 'YYYY-MM-DD': { sum: X, count: Y, dayOfWeek: D } }
-
-    for (let i = 1; i <= 7; i++) { // Iterate through the last 7 completed days (yesterday, day before yesterday, ...)
-        const pastDay = new Date(today);
-        pastDay.setDate(today.getDate() - i);
-        pastDay.setHours(0, 0, 0, 0); // Start of that day
-
-        const nextDayStart = new Date(pastDay);
-        nextDayStart.setDate(pastDay.getDate() + 1);
-
-        const readingsForPastDay = recentEnoughData.filter(r => r.timestamp >= pastDay && r.timestamp < nextDayStart);
-
-        const dayKey = pastDay.toISOString().split('T')[0]; // 'YYYY-MM-DD'
-        if (readingsForPastDay.length > 0) {
-            const sum = readingsForPastDay.reduce((acc, curr) => acc + curr.pm25, 0);
-            pastDailyAverages[dayKey] = {
-                sum: sum,
-                count: readingsForPastDay.length,
-                dayOfWeek: pastDay.getDay() // 0 for Sunday, 1 for Monday, etc.
-            };
-        }
+    // 2. Calculate Recent Overall Average
+    const recentOverallSlice = sortedPastDailyAverages.slice(-RECENT_DAYS_FOR_OVERALL_AVG);
+    let pm25RecentOverallAvg = null;
+    let actualRecentDaysCount = 0;
+    if (recentOverallSlice.length > 0) {
+        pm25RecentOverallAvg = recentOverallSlice.reduce((sum, day) => sum + day.avgPm25, 0) / recentOverallSlice.length;
+        actualRecentDaysCount = recentOverallSlice.length;
     }
 
-    // Generate predictions for the next 7 days
+    // 3. Predict for the next 7 days
     for (let i = 0; i < 7; i++) {
-        const futureDate = new Date(today);
-        futureDate.setDate(today.getDate() + i + 1); // For tomorrow, day after, etc.
-        const futureDayOfWeek = futureDate.getDay();
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + i + 1);
+        const targetDayOfWeek = targetDate.getDay();
+
+        // a. Day-of-Week (DoW) Component
+        const dowSpecificAverages = sortedPastDailyAverages.filter(d => d.dayOfWeek === targetDayOfWeek);
+        let pm25DowSpecificAvg = null;
+        let dowInstanceCount = dowSpecificAverages.length;
+        if (dowInstanceCount > 0) {
+            pm25DowSpecificAvg = dowSpecificAverages.reduce((sum, day) => sum + day.avgPm25, 0) / dowInstanceCount;
+        }
+
+        // b. Blending Logic
         let predictedPm25 = null;
-        let confidence = 20; // Base confidence
-
-        // Find the corresponding day of the week from our calculated pastDailyAverages
-        let matchedPastDayAvg = null;
-        for (const dateKey in pastDailyAverages) {
-            if (pastDailyAverages[dateKey].dayOfWeek === futureDayOfWeek) {
-                matchedPastDayAvg = pastDailyAverages[dateKey].sum / pastDailyAverages[dateKey].count;
-                break; // Use the most recent match for that day of the week
-            }
+        if (pm25DowSpecificAvg !== null && pm25RecentOverallAvg !== null) {
+            predictedPm25 = (WEIGHT_DOW * pm25DowSpecificAvg) + (WEIGHT_RECENT * pm25RecentOverallAvg);
+        } else if (pm25DowSpecificAvg !== null) { // Only DoW available
+            predictedPm25 = pm25DowSpecificAvg;
+        } else if (pm25RecentOverallAvg !== null) { // Only recent overall available
+            predictedPm25 = pm25RecentOverallAvg;
+        } else { // Should not happen if MIN_TOTAL_DAILY_DATAPOINTS is met, but as a safeguard
+            predictedPm25 = sortedPastDailyAverages[sortedPastDailyAverages.length - 1].avgPm25;
         }
 
-        if (matchedPastDayAvg !== null) {
-            predictedPm25 = matchedPastDayAvg;
-            confidence = 50; // Higher confidence if we have a day-of-week match
-        } else {
-            // Fallback: if no specific day-of-week match, use overall 7-day average from `averages`
-            // This requires `averages` to be calculated before this function is called if used.
-            // For simplicity, let's just leave it null or use a very simple fallback for now.
-            // Or, we could use the average of all `pastDailyAverages` if available.
-            const allPastAvgs = Object.values(pastDailyAverages);
-            if(allPastAvgs.length > 0) {
-                predictedPm25 = allPastAvgs.reduce((sum, day) => sum + (day.sum / day.count), 0) / allPastAvgs.length;
-                confidence = 30;
-            }
+        // c. Confidence Calculation
+        let currentConfidence = 20; // Base
+        if (dowInstanceCount >= 2 && actualRecentDaysCount >= Math.min(3, RECENT_DAYS_FOR_OVERALL_AVG)) {
+            currentConfidence = 70; // Good DoW data and good recent trend data
+        } else if (dowInstanceCount >= 1 && actualRecentDaysCount >= Math.min(3, RECENT_DAYS_FOR_OVERALL_AVG)) {
+            currentConfidence = 60; // Decent DoW and good recent
+        } else if (dowInstanceCount >= 2) {
+            currentConfidence = 50; // Good DoW, but recent trend might be less reliable
+        } else if (actualRecentDaysCount >= Math.min(3, RECENT_DAYS_FOR_OVERALL_AVG)) {
+            currentConfidence = 40; // No strong DoW pattern, but recent trend is somewhat okay
+        } else if (dowInstanceCount === 1) {
+            currentConfidence = 30; // Only one DoW instance
         }
+        
+        currentConfidence -= i * 5; // Decrease confidence for days further out (i is 0-6 for day offset 1-7)
+        const finalConfidence = Math.max(10, Math.min(currentConfidence, 85)); // Clamp confidence
 
         predictionsArray.push({
-            dayName: dayNames[futureDayOfWeek],
-            date: futureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}),
-            pm25: predictedPm25 !== null ? Math.max(0, predictedPm25) : null, // Ensure non-negative
-            confidence: confidence
+            dayName: dayNames[targetDate.getDay()],
+            date: targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}),
+            pm25: predictedPm25 !== null ? Math.max(0, predictedPm25) : null,
+            confidence: finalConfidence
         });
     }
     return predictionsArray;
