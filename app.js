@@ -487,12 +487,13 @@ function getAirQualityStatus(pm25) {
     if (pm25 === undefined || pm25 === null || isNaN(pm25)) {
         return { status: 'No Data', className: isDark ? 'dark:bg-gray-700 dark:text-gray-300' : 'bg-gray-100 text-gray-600', color: '#6B7280' };
     }
-    if (pm25 <= 9) return { status: 'Good', className: isDark ? 'dark:bg-green-800 dark:text-green-200' : 'bg-green-100 text-green-700', color: '#10B981' };
-    if (pm25 <= 35.4) return { status: 'Moderate', className: isDark ? 'dark:bg-yellow-800 dark:text-yellow-200' : 'bg-yellow-100 text-yellow-700', color: '#F59E0B' };
-    if (pm25 <= 55.4) return { status: 'Unhealthy for Sensitive', className: isDark ? 'dark:bg-orange-800 dark:text-orange-200' : 'bg-orange-100 text-orange-700', color: '#F97316' };
-    if (pm25 <= 125.4) return { status: 'Unhealthy', className: isDark ? 'dark:bg-red-800 dark:text-red-200' : 'bg-red-100 text-red-700', color: '#EF4444' };
-    if (pm25 >= 225.5) return { status: 'Very Unhealthy', className: isDark ? 'dark:bg-purple-800 dark:text-purple-200' :'bg-purple-100 text-purple-700', color: '#8B5CF6' };
-    return { status: 'Hazardous', className: isDark ? 'dark:bg-red-900 dark:text-red-200' : 'bg-red-200 text-red-800', color: '#B91C1C' };
+    if (pm25 <= 9) return { status: 'Good', className: 'status-badge good-status', color: '#10B981' };
+    if (pm25 <= 35.4) return { status: 'Moderate', className: 'status-badge moderate-status', color: '#F59E0B' };
+    if (pm25 <= 55.4) return { status: 'Unhealthy for Sensitive Groups', className: 'status-badge unhealthy-status', color: '#F43F5E' };
+    if (pm25 <= 125.4) return { status: 'Unhealthy', className: 'status-badge unhealthy-status', color: '#EF4444' };
+    if (pm25 <= 225.4) return { status: 'Very Unhealthy', className: 'status-badge very-unhealthy-status', color: '#D946EF' };
+    // Add other levels if necessary for completeness here
+    return { status: 'Hazardous', className: 'status-badge hazardous-status', color: '#B91C1C' };
 }
 
 
