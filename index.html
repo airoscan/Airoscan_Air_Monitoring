@@ -778,11 +778,11 @@
         // Helper function to determine text color based on PM2.5 value
         function pm25ValueColor(pm25) { // Used by new prediction display
             if (pm25 === null || isNaN(pm25)) return 'text-gray-500 dark:text-gray-400'; // For N/A values
-            if (pm25 <= 9) return 'text-green-600 dark:text-green-400';
-            if (pm25 <= 35.4) return 'text-yellow-600 dark:text-yellow-400';
-            if (pm25 <= 55.4) return 'text-orange-600 dark:text-orange-400';
-            if (pm25 <= 125.4) return 'text-red-600 dark:text-red-400';
-            if (pm25 >= 225.5) return 'text-purple-600 dark:text-purple-400';
+            if (pm25 <= 9) return { status: 'Good', className: 'status-badge good-status', color: '#10B981' };
+                if (pm25 <= 35.4) return { status: 'Moderate', className: 'status-badge moderate-status', color: '#F59E0B' };
+                if (pm25 <= 55.4) return { status: 'Unhealthy for Sensitive Groups', className: 'status-badge unhealthy-status', color: '#F43F5E' };
+                if (pm25 <= 125.4) return { status: 'Unhealthy', className: 'status-badge unhealthy-status', color: '#EF4444' };
+                if (pm25 <= 225.4) return { status: 'Very Unhealthy', className: 'status-badge very-unhealthy-status', color: '#D946EF' };
             return 'text-red-800 dark:text-red-300';
         }
 
@@ -1169,7 +1169,7 @@
                 if (pm25 <= 35.4) return { status: 'Moderate', className: 'status-badge moderate-status', color: '#F59E0B' };
                 if (pm25 <= 55.4) return { status: 'Unhealthy for Sensitive Groups', className: 'status-badge unhealthy-status', color: '#F43F5E' };
                 if (pm25 <= 125.4) return { status: 'Unhealthy', className: 'status-badge unhealthy-status', color: '#EF4444' };
-                if (pm25 >= 225.5) return { status: 'Very Unhealthy', className: 'status-badge very-unhealthy-status', color: '#D946EF' };
+                if (pm25 <= 225.4) return { status: 'Very Unhealthy', className: 'status-badge very-unhealthy-status', color: '#D946EF' };
                 // Add other levels if necessary for completeness here
                 return { status: 'Hazardous', className: 'status-badge hazardous-status', color: '#B91C1C' };
             };
