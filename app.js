@@ -388,6 +388,7 @@ function updateDefaultValues() {
 }
 
 // Function to update a specific location's display elements
+// Function to update a specific location's display elements
 function updateLocationDisplay(locationId, reading) {
     const prefix = locationId === 'makhmor-road' ? 'makhmor' : 'naznaz';
     const isMakhmor = locationId === 'makhmor-road';
@@ -400,7 +401,8 @@ function updateLocationDisplay(locationId, reading) {
         statusTime: document.getElementById(`${prefix}-status-time`),
         lastUpdated: document.getElementById(`${prefix}-last-updated`),
         timeAgo: document.getElementById(`${prefix}-time-ago`),
-        averagePM25: document.getElementById(`${prefix}-average-pm25`),
+        // averagePM25: document.getElementById(`${prefix}-average-pm25`), // Old element
+        lastWeekAveragePM25: document.getElementById(`${prefix}-last-week-avg-pm25`), // New element
         sensorStatus: document.getElementById(`${prefix}-sensor-status`),
         detailName: document.getElementById(`${detailPrefix}-name`),
         detailPM25: document.getElementById(`${detailPrefix}-pm25`),
@@ -417,7 +419,8 @@ function updateLocationDisplay(locationId, reading) {
         if (elements.statusTime) elements.statusTime.textContent = 'Updating...';
         if (elements.lastUpdated) elements.lastUpdated.textContent = 'Unknown';
         if (elements.timeAgo) elements.timeAgo.textContent = 'Loading...';
-        if (elements.averagePM25) elements.averagePM25.textContent = '--';
+        // if (elements.averagePM25) elements.averagePM25.textContent = '--'; // Old element
+        if (elements.lastWeekAveragePM25) elements.lastWeekAveragePM25.textContent = '--'; // New element default
 
         if (elements.detailName) elements.detailName.textContent = locationName;
         if (elements.detailPM25) elements.detailPM25.innerHTML = `--<span class="ml-1 text-sm text-gray-500 dark:text-gray-400">μg/m³ PM2.5</span>`;
@@ -462,10 +465,16 @@ function updateLocationDisplay(locationId, reading) {
              if (elements.timeAgo) elements.timeAgo.textContent = 'Error';
         }
 
-        const avg24h = averages[locationId] ? averages[locationId]['24h'].pm25 : 0;
-        if (elements.averagePM25) {
-            elements.averagePM25.textContent = avg24h.toFixed(1);
+        // const avg24h = averages[locationId] ? averages[locationId]['24h'].pm25 : 0; // Old logic
+        // if (elements.averagePM25) { // Old element
+        //    elements.averagePM25.textContent = avg24h.toFixed(1);
+        // }
+
+        const avg7d = averages[locationId] ? averages[locationId]['7d'].pm25 : 0; // New: Fetch 7-day average
+        if (elements.lastWeekAveragePM25) { // New: Update the new element
+            elements.lastWeekAveragePM25.textContent = avg7d.toFixed(1);
         }
+
 
         if (elements.detailName) elements.detailName.textContent = locationName;
         if (elements.detailPM25) elements.detailPM25.innerHTML = `${pm25Value !== null ? pm25Value.toFixed(1) : '--'}<span class="ml-1 text-sm text-gray-500 dark:text-gray-400">μg/m³ PM2.5</span>`;
