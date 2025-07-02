@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PM2.5 Information</title> 
     <meta name="description" content="Learn about PM2.5 air pollution, health effects, and protection measures. Part of Airoscan Air Quality Monitoring System.">
-    
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // Apply theme immediately to prevent flash
         (function() {
@@ -267,15 +267,15 @@
         <section class="mb-8">
             <h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4" data-i18n="pm25ScaleTitle">PM2.5 Concentration Scale</h2>
             <div class="neo-card p-6">
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4" data-i18n="epaStandards">Based on US EPA Air Quality Index (AQI) standards</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4" data-i18n="whoStandards">Based on WHO Air Quality standards</p>
                 <div class="space-y-3">
                     <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="w-16 h-16 bg-green-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            0-9
+                        <div class="w-16 h-16 bg-green-700 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
+                            0-5
                         </div>
                         <div class="flex-1">
-                            <h4 class="font-semibold text-green-700 dark:text-green-400" data-i18n="good">Good</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="noHealthImpacts">Air quality is satisfactory - No health impacts expected</p>
+                            <h4 class="font-semibold text-green-700 dark:text-green-400" data-i18n="Safe">Safe</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="noHealthImpacts">Air quality is satisfactory, posing little or no risk.</p>
                         </div>
                         <div class="text-2xl bg-green-100 dark:bg-green-900/20 w-10 h-10 rounded-full flex items-center justify-center">
                             <span class="text-base">✓</span>
@@ -283,56 +283,56 @@
                     </div>
                     
                     <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="w-16 h-16 bg-yellow-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            9.1-35.4
+                        <div class="w-16 h-16 bg-green-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
+                            5.1-10
                         </div>
                         <div class="flex-1">
-                            <h4 class="font-semibold text-yellow-700 dark:text-yellow-400" data-i18n="moderate">Moderate</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="acceptable">Acceptable - Unusually sensitive people should consider limiting prolonged outdoor exertion</p>
+                            <h4 class="font-semibold text-yellow-700 dark:text-green-300" data-i18n="Low">Low</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="acceptable">Acceptable - Unusually sensitive people should consider limiting prolonged outdoor exertion.</p>
                         </div>
-                        <span class="text-2xl">😐</span>
+                        <div class="text-2xl">🙂</div>
+                    </div>
+                    
+                    <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <div class="w-16 h-16 bg-yellow-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
+                            10.1-15
+                        </div>
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-yellow-600 dark:text-yellow-400" data-i18n="moderate">Moderate</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="sensitiveGroups">People with heart/lung disease, children, and older adults should limit prolonged outdoor exertion.</p>
+                        </div>
+                        <div class="text-2xl">😐</div>
                     </div>
                     
                     <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
                         <div class="w-16 h-16 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            35.5-55.4
+                            15.1-25
                         </div>
                         <div class="flex-1">
-                            <h4 class="font-semibold text-orange-700 dark:text-orange-400" data-i18n="unhealthySensitive">Unhealthy for Sensitive Groups</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="sensitiveGroups">People with heart/lung disease, children, and older adults should limit prolonged outdoor exertion</p>
+                            <h4 class="font-semibold text-orange-500 dark:text-orange-500" data-i18n="unhealthy">Unhealthy</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="everyoneAffected">Significant increase in asthma, and early death, wear masks when outside.</p>
                         </div>
-                        <span class="text-2xl">😷</span>
+                        <span class="text-2xl">😟</span>
                     </div>
                     
                     <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="w-18 h-16 bg-red-500 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            55.5-125.4
+                        <div class="w-16 h-16 bg-red-900 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
+                            25.1-35
                         </div>
                         <div class="flex-1">
-                            <h4 class="font-semibold text-red-700 dark:text-red-400" data-i18n="unhealthy">Unhealthy</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="everyoneAffected">Everyone may experience health effects; sensitive groups should avoid outdoor exertion</p>
+                            <h4 class="font-semibold text-red-700 dark:text-red-500" data-i18n="veryUnhealthy">Very Unhealthy</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="healthAlert">Health alert: serious health effects for everyone.</p>
                         </div>
-                        <span class="text-2xl">🤒</span>
+                        <span class="text-2xl">😰</span>
                     </div>
                     
                     <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="w-17 h-16 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            125.5-225.4
+                        <div class="w-16 h-16 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
+                            35.1+
                         </div>
                         <div class="flex-1">
-                            <h4 class="font-semibold text-purple-700 dark:text-purple-400" data-i18n="veryUnhealthy">Very Unhealthy</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="healthAlert">Health alert - Everyone should avoid all outdoor exertion</p>
-                        </div>
-                        <span class="text-2xl">🚨</span>
-                    </div>
-                    
-                    <div class="pm-scale-item flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <div class="w-16 h-16 bg-red-800 rounded-lg flex items-center justify-center text-white font-bold mr-4 text-sm">
-                            225.5+
-                        </div>
-                        <div class="flex-1">
-                            <h4 class="font-semibold text-red-800 dark:text-red-300" data-i18n="hazardous">Hazardous</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="healthEmergency">Health emergency - Everyone should avoid all outdoor activity</p>
+                            <h4 class="font-semibold text-purple-700 dark:text-purple-400" data-i18n="hazardous">Hazardous</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="healthEmergency">Health emergency - Everyone should avoid all outdoor activity.</p>
                         </div>
                         <span class="text-2xl">☠️</span>
                     </div>
@@ -439,10 +439,11 @@
             <div class="neo-card p-6">
                 <div class="space-y-4">
                     <div class="border-l-4 border-orange-500 pl-4">
-                        <h4 class="font-medium text-gray-700 dark:text-gray-200 mb-1" data-i18n="epaSourceTitle">U.S. Environmental Protection Agency (EPA)</h4>
-                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1" data-i18n="epaSourceDesc">PM2.5 Air Quality Index (AQI) Breakpoints and Health Guidelines</p>
-                        <a href="https://www.epa.gov/pm-pollution/particulate-matter-pm-basics" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-600 dark:text-blue-400 hover:underline" data-i18n="epaSourceLinkText">
-                            EPA PM2.5 Basics →
+                        <h4 class="font-medium text-gray-700 dark:text-gray-200 mb-1" data-i18n="whoSourceTitle">World Health Organization (WHO)</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1" data-i18n="whoSourceTitle">WHO global air quality guidelines: particulate matter (‎PM2.5 and PM10)‎, ozone, nitrogen dioxide, sulfur dioxide and carbon monoxide
+                        </p>
+                        <a href="https://www.who.int/publications/i/item/9789240034228" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-600 dark:text-blue-400 hover:underline" data-i18n="whoSourceLinkText">
+                            WHO PM2.5 Basics →
                         </a>
                     </div>
                     
@@ -472,7 +473,7 @@
                     
                     <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                         <p class="text-xs text-gray-500 dark:text-gray-400" data-i18n="referencesNote">
-                            <strong>Note:</strong> The PM2.5 concentration ranges shown are based on the U.S. EPA Air Quality Index (AQI) standards. 
+                            <strong>Note:</strong> The PM2.5 concentration ranges shown are based on the WHO Air Quality standards. 
                             Different countries may use slightly different breakpoints. The WHO recommends even stricter guidelines with an annual mean of 5 μg/m³ 
                             and a 24-hour mean of 15 μg/m³ for optimal health protection.
                         </p>
