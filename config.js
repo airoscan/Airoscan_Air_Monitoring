@@ -35,6 +35,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.warn('Please set your Supabase API key in config.js');
         }
     } catch (error) {
-        console.error('Error initializing configuration:', error);
+        // Remove: console.error('Error initializing configuration:', error);
     }
 }); 

@@ -33,7 +33,6 @@ const dbConfig = {
     initClient: function() {
         // Check if the key was actually pasted in
         if (!this.supabaseAnonKey || this.supabaseAnonKey === "YOUR_SUPABASE_ANON_KEY_HERE") {
-            console.error('Supabase Anon Key is missing in db-config.js. Please paste it in.');
             // Optionally, show an error to the user here as well,
             // because the dashboard won't work without the key.
             const errorDiv = document.getElementById('error-message');
@@ -53,16 +52,16 @@ const dbConfig = {
             // Create the Supabase client using the hardcoded anon key
             // This single line replaces the old logic that used localStorage
             this.client = supabase.createClient(this.supabaseUrl, this.supabaseAnonKey);
-            console.log('Supabase client initialized successfully with Anon key.');
             return true; // Indicate success
 
         } catch (error) {
-            console.error('Failed to initialize Supabase client:', error);
-             const errorDiv = document.getElementById('error-message');
-             if (errorDiv) {
-                 errorDiv.textContent = `Error initializing database connection: ${error.message}`;
-                 errorDiv.style.display = 'block';
-             }
+            // Optionally, show an error to the user here as well,
+            // because the dashboard won't work without the key.
+            const errorDiv = document.getElementById('error-message');
+            if (errorDiv) {
+                errorDiv.textContent = `Error initializing database connection: ${error.message}`;
+                errorDiv.style.display = 'block';
+            }
             return false; // Indicate failure
         }
     }
