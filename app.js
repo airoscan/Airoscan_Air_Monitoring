@@ -56,7 +56,6 @@ const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
 function showError(message, duration = 7000) {
     const errorContainer = document.getElementById('error-message');
     if (!errorContainer) {
-        console.error('Error container (id="error-message") not found in HTML. Message:', message);
         return;
     }
     errorContainer.textContent = message;
@@ -87,7 +86,6 @@ function calculateAverages(data) {
 function parseCSV(csvText) {
     const lines = csvText.trim().split(/\r\n|\n/);
     if (lines.length < 2) {
-        showError("CSV file is empty or has no data rows.");
         return [];
     }
     const headers = lines[0].split(',').map(header => header.trim());
@@ -130,13 +128,11 @@ function parseCSV(csvText) {
 
 function processParsedCsvDataForForecast(parsedCsvData) {
     if (!parsedCsvData || parsedCsvData.length === 0) {
-        console.warn("No parsed CSV data to process for forecast.");
         return Array(7).fill(null).map((_, i) => { // Return empty structure
             const futureDate = new Date();
             futureDate.setDate(futureDate.getDate() + i);
-            const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
             return {
-                dayName: dayNames[futureDate.getDay()],
+                dayName: futureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}),
                 date: futureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric'}),
                 pm25: null, confidence: 0
             };
@@ -188,7 +184,6 @@ async function loadPredictionsFromRepo(locationId) {
     const csvPath = locationId === 'makhmor-road' ? basePath + makhmorCsvName : basePath + naznazCsvName;
 
     try {
-        console.log(`Fetching ${csvPath} for ${locationId}...`);
         const response = await fetch(csvPath);
         if (!response.ok) {
             throw new Error(`Failed to fetch ${csvPath}: ${response.status} ${response.statusText}. Ensure the file exists at this path in your GitHub repository and the site is deployed. Correct file name and path are crucial.`);
@@ -206,13 +201,12 @@ async function loadPredictionsFromRepo(locationId) {
             } else if (locationId === 'naznaz-area') {
                 fileLoadedNaznazPredictions = forecast;
             }
-            console.log(`${locationId} predictions successfully processed from ${csvPath}.`);
         } else {
-            throw new Error(`No forecast data could be processed from ${csvPath}.`);
+            if (locationId === 'makhmor-road') fileLoadedMakhmorPredictions = null;
+            if (locationId === 'naznaz-area') fileLoadedNaznazPredictions = null;
         }
     } catch (error) {
-        showError(`Error loading ${locationId} predictions: ${error.message}`);
-        console.error(`Error details for ${locationId} at ${csvPath}:`, error);
+        // showError(`Error loading ${locationId} predictions: ${error.message}`); // Suppressed for user-friendliness
         if (locationId === 'makhmor-road') fileLoadedMakhmorPredictions = null;
         if (locationId === 'naznaz-area') fileLoadedNaznazPredictions = null;
     }
@@ -228,7 +222,6 @@ function calculate7DayDailyPrediction(locationId, locationData) { // locationDat
     // Fallback if CSV data isn't loaded (e.g., file not found, parsing error)
     // This uses the complex historical calculation from your original app.js
     // You can replace this with a simpler placeholder if preferred.
-    console.warn(`Using original historical calculation for ${locationId} as CSV data not available.`);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const predictionsArray = [];
@@ -362,7 +355,6 @@ async function refreshData() {
              window.updateMapData(); // Update map markers and popups
         }
     } catch (error) {
-        console.error('Error in refreshData:', error);
         showError('Failed to refresh sensor data: ' + error.message);
         // Consider resetting UI to 'no data' state for sensor dependent parts
         updateLocationDisplay('makhmor-road', null);
@@ -451,7 +443,7 @@ function updateLocationDisplay(locationId, reading) {
     if (elements.detailPM25) elements.detailPM25.innerHTML = `${pm25Value !== null ? pm25Value.toFixed(1) : '--'}<span class="ml-1 text-sm text-gray-500 dark:text-gray-400">${window.t ? window.t('microgramPM25') : 'μg/m³ PM2.5'}</span>`;
     if (elements.detailHumidity) elements.detailHumidity.innerHTML = `${humidityValue !== null ? humidityValue.toFixed(1) : '--'}<span class="ml-1 text-sm text-gray-500 dark:text-gray-400">${window.t ? window.t('percentHumidity') : '% Humidity'}</span>`;
     
-    // Averages are updated by a separate function: updateAveragesDisplay()
+    // Averages are updated by a separate function: updateAveragesDisplay
     // The lastWeekAveragePM25 element is updated in updateAveragesDisplay
 }
 
@@ -587,19 +579,15 @@ function updatePredictionsDisplay() {
 // --- Initialization and Event Listeners ---
 
 async function initializeSupabase() {
-    console.log("Verifying Supabase client status...");
     try {
         if (!window.dbConfig || !window.dbConfig.client) {
-            console.error("Supabase client not found. db-config.js might have failed to initialize it.");
-            throw new Error('Database client initialization failed. Check API Key in db-config.js or if Supabase JS loaded.');
+            throw new Error('Database client not found. db-config.js might have failed to initialize it.');
         }
-        console.log("Testing existing Supabase client connection...");
         const { error } = await window.dbConfig.client
             .from(window.dbConfig.airQualityTable)
             .select('id', { count: 'exact', head: true }); // Simple query to test connection & RLS
 
         if (error) {
-            console.error("Supabase client connection test failed:", error);
             let userMessage = `Database connection test failed: ${error.message}.`;
             if (error.message.includes('fetch') || error.message.toLowerCase().includes('networkerror')) {
                  userMessage = 'Database Connection Error: Network issue. Please check your internet connection and Supabase status.';
@@ -610,10 +598,8 @@ async function initializeSupabase() {
             }
             throw new Error(userMessage); // Throw with user-friendly message
         }
-        console.log('Supabase client connection test successful.');
         return true;
     } catch (error) {
-        console.error('Failed during Supabase client verification:', error);
         showError(error.message); // Show the refined error message
         return false;
     }
@@ -652,9 +638,9 @@ function applyInitialTheme() {
 function initCharts() { // Consolidated chart initialization
     try {
         const mainChartElement = document.getElementById('air-quality-chart');
-        if (!mainChartElement) { console.error('Main chart element (air-quality-chart) not found.'); return false; }
+        if (!mainChartElement) { return false; }
         const ctxMain = mainChartElement.getContext('2d');
-        if (!ctxMain) { console.error('Failed to get main chart context.'); return false; }
+        if (!ctxMain) { return false; }
 
         const isDarkMode = document.documentElement.classList.contains('dark');
         Chart.defaults.font.family = "'Manrope', sans-serif";
@@ -692,13 +678,12 @@ function initCharts() { // Consolidated chart initialization
             { label: 'Makhmor Road', borderColor: '#F97316', backgroundColor: gradientMakhmor, pointBackgroundColor: '#F97316', data: [], yAxisID: 'yPm25', fill: true, borderWidth: 2.5, tension: 0.4, pointRadius: 2, pointHoverRadius: 5 },
             { label: 'Naznaz Area', borderColor: '#3B82F6', backgroundColor: gradientNaznaz, pointBackgroundColor: '#3B82F6', data: [], yAxisID: 'yPm25', fill: true, borderWidth: 2.5, tension: 0.4, pointRadius: 2, pointHoverRadius: 5 }
         ];
-        console.log("Main trend chart structure initialized.");
         return true;
-    } catch (error) { console.error('Error initializing charts:', error); showError('Could not initialize charts: ' + error.message); return false; }
+    } catch (error) { showError('Could not initialize charts: ' + error.message); return false; }
 }
 
 function updateCharts(processedSensorData) { // Takes live sensor data, not predictions
-    if (!mainChart) { console.error('Main chart not initialized for update.'); return; }
+    if (!mainChart) { return; }
     const now = new Date();
     const timeLimit = timeRanges[currentTimeRange];
     const isDarkMode = document.documentElement.classList.contains('dark');
@@ -869,37 +854,30 @@ function getTimeAgo(date) { /* ... (implementation from original app.js) ... */
 
 
 async function initDashboard() {
-    console.log('Initializing dashboard...');
     applyInitialTheme();
 
     try {
         const supabaseInitialized = await initializeSupabase();
         if (!supabaseInitialized) {
-            console.error('Dashboard initialization halted: Supabase connection failed.');
             return;
         }
-        console.log('Database connection initialized.');
 
         setupEventListeners();
-        console.log('Event listeners initialized.');
         
         const chartsInitialized = initCharts();
         if(!chartsInitialized) console.warn("Chart initialization failed, main chart might not display.");
-        else console.log("Charts initialized.");
 
         console.log('Attempting to load predictions from repository CSVs...');
         await Promise.all([
             loadPredictionsFromRepo('makhmor-road'),
             loadPredictionsFromRepo('naznaz-area')
         ]).catch(err => {
-            console.error("Error during initial prediction loading from CSVs:", err);
             // Continue initialization even if CSVs fail, fallback in calculate7Day... will be used
         });
         console.log('Initial prediction loading from CSVs (attempt) complete.');
 
         if (window.sensorStatus && typeof window.sensorStatus.init === 'function') {
             window.sensorStatus.init();
-            console.log('Sensor status tracking initialized.');
         } else {
             console.warn('Sensor status module not found or init function missing.');
         }
@@ -912,7 +890,6 @@ async function initDashboard() {
         console.log('Dashboard initialized successfully.');
 
     } catch (error) {
-        console.error('Critical error during dashboard initialization:', error);
         showError('FATAL: Dashboard could not initialize. ' + error.message);
     }
 }

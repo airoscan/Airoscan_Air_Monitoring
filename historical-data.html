@@ -251,23 +251,6 @@ body {
     background: #4B5563;
 }
 
-/* Error message */
-#error-message {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background-color: #ef4444;
-    color: white;
-    padding: 1rem;
-    z-index: 10000;
-    display: none;
-    text-align: center;
-    font-size: 1rem;
-    font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
 /* Calendar styling */
 .calendar-input {
     padding: 1rem;
@@ -997,7 +980,6 @@ async function loadData() {
 
     } catch (error) {
         console.error('Error loading data:', error);
-        showError('Failed to load data: ' + error.message);
         showNoData();
     }
 }
@@ -1421,21 +1403,6 @@ function updateChart() {
         currentChart.destroy();
         createChart();
     }
-}
-
-function showError(message, duration = 5000) {
-    const errorContainer = document.getElementById('error-message');
-    if (!errorContainer) {
-        console.error('Error container not found:', message);
-        return;
-    }
-
-    errorContainer.textContent = message;
-    errorContainer.style.display = 'block';
-
-    setTimeout(() => {
-        errorContainer.style.display = 'none';
-    }, duration);
 }
 
 // Make functions available globally

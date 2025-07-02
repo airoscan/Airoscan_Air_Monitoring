@@ -39,10 +39,8 @@ async function initializeDatabase() {
         console.log('Database initialized successfully');
         return true;
     } catch (error) {
-        console.error('Database initialization failed:', error);
         // Clear the invalid API key
         localStorage.removeItem('supabase_api_key');
-        alert(`Failed to initialize database: ${error.message}\nPlease refresh the page and try again with a valid API key.`);
         return false;
     }
 }
