@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Historical Data - Airoscan</title>
 <meta name="description" content="View historical air quality data from Airoscan monitoring stations in Erbil, Kurdistan. Simple and easy air quality history viewer.">
-
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
 // Apply theme immediately
 (function() {
@@ -1147,13 +1147,13 @@ function calculateAndDisplayStats() {
     const qualityInfo = getAirQualityStatus(average);
     document.getElementById('overallQuality').textContent = qualityInfo.status;
     
-    // Set emoji based on quality
+    // Set emoji based on quality (update to match new breakpoints)
     const qualityEmoji = document.getElementById('qualityEmoji');
-    if (average <= 9) qualityEmoji.textContent = '😊';
-    else if (average <= 35.4) qualityEmoji.textContent = '🙂';
-    else if (average <= 55.4) qualityEmoji.textContent = '😐';
-    else if (average <= 125.4) qualityEmoji.textContent = '😟';
-    else if (average <= 225.4) qualityEmoji.textContent = '😰';
+    if (average <= 5) qualityEmoji.textContent = '😊';
+    else if (average <= 10) qualityEmoji.textContent = '🙂';
+    else if (average <= 15) qualityEmoji.textContent = '😐';
+    else if (average <= 25) qualityEmoji.textContent = '😟';
+    else if (average <= 35) qualityEmoji.textContent = '😰';
     else qualityEmoji.textContent = '☠️';
 }
 
@@ -1366,49 +1366,25 @@ function getLocationDisplayName(locationId) {
 }
 
 function getAirQualityStatus(pm25) {
+    const t = window.t || (key => key.charAt(0).toUpperCase() + key.slice(1));
     if (pm25 === undefined || pm25 === null || isNaN(pm25)) {
-        return { 
-            status: window.t ? window.t('noData') : 'No Data', 
-            className: 'status-badge nodata-status' 
-        };
+        return { status: t('noData'), className: 'nodata-status', color: '#6B7280' };
     }
-    
-    const value = parseFloat(pm25);
-    
-    if (value <= 9) return { 
-        status: window.t ? window.t('good') : 'Good', 
-        className: 'status-badge good-status' 
-    };
-    if (value <= 35.4) return { 
-        status: window.t ? window.t('moderate') : 'Moderate', 
-        className: 'status-badge moderate-status' 
-    };
-    if (value <= 55.4) return { 
-        status: window.t ? window.t('unhealthySensitive') : 'Unhealthy for Sensitive', 
-        className: 'status-badge unhealthy-sensitive-status' 
-    };
-    if (value <= 125.4) return { 
-        status: window.t ? window.t('unhealthy') : 'Unhealthy', 
-        className: 'status-badge unhealthy-status' 
-    };
-    if (value <= 225.4) return { 
-        status: window.t ? window.t('veryUnhealthy') : 'Very Unhealthy', 
-        className: 'status-badge very-unhealthy-status' 
-    };
-    
-    return { 
-        status: window.t ? window.t('hazardous') : 'Hazardous', 
-        className: 'status-badge hazardous-status' 
-    };
+    if (pm25 <= 5) return { status: t('safe'), className: 'safe-status', color: '#10B981' };
+    if (pm25 <= 10) return { status: t('low'), className: 'low-status', color: '#90EE90' };
+    if (pm25 <= 15) return { status: t('moderate'), className: 'moderate-status', color: '#F59E0B' };
+    if (pm25 <= 25) return { status: t('unhealthy'), className: 'unhealthy-status', color: '#7F1D1D' };
+    if (pm25 <= 35) return { status: t('veryUnhealthy'), className: 'very-unhealthy-status', color: '#8B5CF6' };
+    return { status: t('hazardous'), className: 'hazardous-status', color: '#8B5CF6' };
 }
 
 function getQualityEmoji(pm25) {
     const value = parseFloat(pm25);
-    if (value <= 9) return '😊';
-    if (value <= 35.4) return '🙂';
-    if (value <= 55.4) return '😐';
-    if (value <= 125.4) return '😟';
-    if (value <= 225.4) return '😰';
+    if (value <= 5) return '😊';
+    if (value <= 10) return '🙂';
+    if (value <= 15) return '😐';
+    if (value <= 25) return '😟';
+    if (value <= 35) return '😰';
     return '☠️';
 }
 

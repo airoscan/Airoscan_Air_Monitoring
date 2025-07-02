@@ -3,7 +3,7 @@ const translations = {
     en: {
 
         lastWeekAvg: "Last Week Avg",
-avgLast7d: "Average over the last 7 days",
+        avgLast7d: "Average over the last 7 days",
         // Header
         appName: "Airoscan",
         university: "Tishk International University",
@@ -58,6 +58,9 @@ avgLast7d: "Average over the last 7 days",
         unhealthy: "Unhealthy",
         veryUnhealthy: "Very Unhealthy",
         hazardous: "Hazardous",
+        Safe: "Safe",
+        Low: "Low",
+        
 
         // Descriptions
         avgLast24: "Average over the last 24 hours",
@@ -205,11 +208,11 @@ avgLast7d: "Average over the last 7 days",
         healthProblems: "Can cause serious health problems including heart disease, lung cancer, and respiratory issues",
         protectionMeasures: "Monitor air quality, wear N95 masks when needed, and use air purifiers indoors",
         pm25ScaleTitle: "PM2.5 Concentration <span class='gradient-text'>Scale</span>",
-        epaStandards: "Based on US EPA Air Quality Index (AQI) standards",
+        whoStandards: "Based on WHO Air Quality standards",
         acceptable: "Acceptable - Unusually sensitive people should consider limiting prolonged outdoor exertion",
         sensitiveGroups: "People with heart/lung disease, children, and older adults should limit prolonged outdoor exertion",
-        everyoneAffected: "Everyone may experience health effects; sensitive groups should avoid outdoor exertion",
-        healthAlert: "Health alert - Everyone should avoid all outdoor exertion",
+        everyoneAffected: "Significant increase in asthma, and early death, wear masks when outside.",
+        healthAlert: "Health alert: serious health effects for everyone.",
         healthEmergency: "Health emergency - Everyone should avoid all outdoor activity",
         healthEffectsTitle: "Health <span class='gradient-text'>Effects</span>",
         protectionTitlePage: "Protection <span class='gradient-text-blue'>Measures</span>",
@@ -262,12 +265,12 @@ avgLast7d: "Average over the last 7 days",
         cdcSourceTitle: "Centers for Disease Control and Prevention (CDC)",
         cdcSourceDesc: "Air Quality and Health Information",
         cdcSourceLinkText: "CDC Particulate Matter →",
-        referencesNote: "<strong>Note:</strong> The PM2.5 concentration ranges shown are based on the U.S. EPA Air Quality Index (AQI) standards. Different countries may use slightly different breakpoints. The WHO recommends even stricter guidelines with an annual mean of 5 μg/m³ and a 24-hour mean of 15 μg/m³ for optimal health protection."
+        referencesNote: "<strong>Note:</strong> The PM2.5 concentration ranges shown are based on the WHO Air Quality standards. Different countries may use slightly different breakpoints. The WHO recommends even stricter guidelines with an annual mean of 5 μg/m³ and a 24-hour mean of 15 μg/m³ for optimal health protection."
     },
     ku: {
 
         lastWeekAvg: "تێکڕای هەفتەی ڕابردوو", // Or a shorter version like "تێکڕای ٧ڕۆژ"
-avgLast7d: "تێکڕا لە ماوەی ٧ ڕۆژی ڕابردوو",
+        avgLast7d: "تێکڕا لە ماوەی ٧ ڕۆژی ڕابردوو",
         
         // Kurdish (Sorani) translations
         appName: "ئایرۆسکان",
@@ -315,6 +318,8 @@ avgLast7d: "تێکڕا لە ماوەی ٧ ڕۆژی ڕابردوو",
         unhealthy: "نەخۆش",
         veryUnhealthy: "زۆر نەخۆش",
         hazardous: "مەترسیدار",
+        Safe: "باش",
+        Low: "کەم",
 
         avgLast24: "تێکڕا لە ماوەی ٢٤ کاتژمێری ڕابردوو",
         sensorConnection: "دۆخی پەیوەندی هەستەوەر",
@@ -452,11 +457,11 @@ avgLast7d: "تێکڕا لە ماوەی ٧ ڕۆژی ڕابردوو",
         healthProblems: "دەتوانێت کێشەی تەندروستی جدی دروست بکات وەک نەخۆشی دڵ، شێرپەنجەی سی، و کێشەی هەناسەدان",
         protectionMeasures: "چاودێری کوالیتی هەوا بکە، دەمامکی N95 لەبەر بکە کاتێک پێویستە، و پاککەرەوەی هەوا بەکاربهێنە لە ژوورەوە",
         pm25ScaleTitle: "پێوەری چڕی <span class='gradient-text'>PM2.5</span>",
-        epaStandards: "بەپێی ستانداردەکانی پێوەری کوالیتی هەوای EPA ی ئەمریکا",
+        whoStandards: "بەپێی ستانداردەکانی ڕێکخراوی تەندروستی جیهانی (WHO)",
         acceptable: "پەسەندکراو - کەسانی زۆر هەستیار دەبێت بیر لە سنووردارکردنی ماندووبوونی درێژخایەن لە دەرەوە بکەنەوە",
         sensitiveGroups: "کەسانی تووشی نەخۆشی دڵ/سی، منداڵان، و بەساڵاچووان دەبێت ماندووبوونی درێژخایەن لە دەرەوە سنووردار بکەن",
-        everyoneAffected: "هەموو کەسێک دەکرێت کاریگەری تەندروستی هەست پێ بکات؛ گروپە هەستیارەکان دەبێت لە ماندووبوونی دەرەوە دوور بکەونەوە",
-        healthAlert: "ئاگاداری تەندروستی - هەموو کەسێک دەبێت لە هەموو ماندووبوونێکی دەرەوە دوور بکەوێتەوە",
+        everyoneAffected: "زیادبوونی بەرچاوی هەناسەتەنگی، و مردنی پێشوەختە، لەکاتی چوونە دەرەوە ماسک ببەستن",
+        healthAlert: "ئاگاداری تەندروستی: کاریگەری تەندروستی جددی بۆ هەمووان",
         healthEmergency: "فریاکەوتنی تەندروستی - هەموو کەسێک دەبێت لە هەموو چالاکییەکی دەرەوە دوور بکەوێتەوە",
         healthEffectsTitle: "<span class='gradient-text'>کاریگەرییە</span> تەندروستییەکان",
         protectionTitlePage: "<span class='gradient-text-blue'>ڕێکارەکانی</span> پاراستن",
@@ -509,12 +514,12 @@ avgLast7d: "تێکڕا لە ماوەی ٧ ڕۆژی ڕابردوو",
         cdcSourceTitle: "ناوەندەکانی کۆنترۆڵکردن و پێشگیریکردن لە نەخۆشی (CDC)",
         cdcSourceDesc: "زانیاری دەربارەی کوالیتی هەوا و تەندروستی",
         cdcSourceLinkText: "زانیاری CDC دەربارەی تەنۆلکە وردەکان →",
-        referencesNote: "<strong>تێبینی:</strong> ئاستەکانی چڕی PM2.5 کە پیشان دراون لەسەر بنەمای ستانداردەکانی پێوەری کوالیتی هەوای (AQI) ئاژانسی پاراستنی ژینگەی ئەمریکایە. وڵاتانی جیاواز لەوانەیە خاڵبەندی کەمێک جیاواز بەکاربهێنن. ڕێکخراوی تەندروستی جیهانی ڕێنمایی توندتر پێشنیار دەکات کە تێکڕای ساڵانە ٥ مایکڕۆگرام/م³ و تێکڕای ٢٤ کاتژمێری ١٥ مایکڕۆگرام/م³ بێت بۆ پاراستنی تەندروستی."
+        referencesNote: "<strong>تێبینی:</strong> ئاستەکانی چڕی PM2.5 کە پیشان دراون لەسەر بنەمای ستانداردەکانی ڕێکخراوی تەندروستی جیهانی (WHO) دانراون. وڵاتانی جیاواز لەوانەیە خاڵبەندی کەمێک جیاواز بەکاربهێنن. ڕێکخراوی تەندروستی جیهانی ڕێنمایی توندتر پێشنیار دەکات کە تێکڕای ساڵانە ٥ مایکڕۆگرام/م³ و تێکڕای ٢٤ کاتژمێری ١٥ مایکڕۆگرام/م³ بێت بۆ پاراستنی تەندروستی."
     },
     ar: {
 
         lastWeekAvg: "متوسط آخر أسبوع", // Or "متوسط ٧ أيام"
-avgLast7d: "المتوسط خلال آخر 7 أيام",
+        avgLast7d: "المتوسط خلال آخر 7 أيام",
         
         // Arabic translations
         appName: "إيروسكان",
@@ -562,6 +567,9 @@ avgLast7d: "المتوسط خلال آخر 7 أيام",
         unhealthy: "غير صحي",
         veryUnhealthy: "غير صحي جداً",
         hazardous: "خطر",
+        Safe: "آمن",
+        Low: "منخفض",
+
 
         avgLast24: "المتوسط خلال آخر 24 ساعة",
         sensorConnection: "حالة اتصال المستشعر",
@@ -699,11 +707,11 @@ avgLast7d: "المتوسط خلال آخر 7 أيام",
         healthProblems: "يمكن أن يسبب مشاكل صحية خطيرة بما في ذلك أمراض القلب وسرطان الرئة ومشاكل الجهاز التنفسي",
         protectionMeasures: "راقب جودة الهواء، ارتدِ أقنعة N95 عند الحاجة، واستخدم أجهزة تنقية الهواء في الداخل",
         pm25ScaleTitle: "مقياس تركيز <span class='gradient-text'>PM2.5</span>",
-        epaStandards: "بناءً على معايير مؤشر جودة الهواء لوكالة حماية البيئة الأمريكية",
+        whoStandards: "بناءً على معايير جودة الهواء لمنظمة الصحة العالمية (WHO)",
         acceptable: "مقبول - يجب على الأشخاص الحساسين بشكل غير عادي التفكير في الحد من الجهد المطول في الهواء الطلق",
         sensitiveGroups: "يجب على الأشخاص المصابين بأمراض القلب/الرئة والأطفال وكبار السن الحد من الجهد المطول في الهواء الطلق",
-        everyoneAffected: "قد يعاني الجميع من آثار صحية؛ يجب على المجموعات الحساسة تجنب الجهد في الهواء الطلق",
-        healthAlert: "تنبيه صحي - يجب على الجميع تجنب كل الجهد في الهواء الطلق",
+        everyoneAffected: "زيادة كبيرة في حالات الربو، والوفاة المبكرة، يجب ارتداء الأقنعة عند الخروج",
+        healthAlert: "تنبيه صحي: آثار صحية خطيرة على الجميع",
         healthEmergency: "طوارئ صحية - يجب على الجميع تجنب كل الأنشطة في الهواء الطلق",
         healthEffectsTitle: "<span class='gradient-text'>الآثار</span> الصحية",
         protectionTitlePage: "<span class='gradient-text-blue'>تدابير</span> الحماية",
@@ -756,7 +764,7 @@ avgLast7d: "المتوسط خلال آخر 7 أيام",
         cdcSourceTitle: "مراكز السيطرة على الأمراض والوقاية منها (CDC)",
         cdcSourceDesc: "معلومات عن جودة الهواء والصحة",
         cdcSourceLinkText: "الجسيمات الدقيقة من CDC ←",
-        referencesNote: "<strong>ملاحظة:</strong> نطاقات تركيز PM2.5 المعروضة تستند إلى معايير مؤشر جودة الهواء (AQI) لوكالة حماية البيئة الأمريكية. قد تستخدم البلدان المختلفة نقاط توقف مختلفة قليلاً. توصي منظمة الصحة العالمية بمبادئ توجيهية أكثر صرامة بمتوسط سنوي قدره 5 ميكروغرام/م³ ومتوسط 24 ساعة قدره 15 ميكروغرام/م³ لتوفير الحماية الصحية المثلى."
+        referencesNote: "<strong>ملاحظة:</strong> نطاقات تركيز PM2.5 المعروضة تستند إلى معايير جودة الهواء لمنظمة الصحة العالمية (WHO). قد تستخدم البلدان المختلفة نقاط توقف مختلفة قليلاً. توصي منظمة الصحة العالمية بمبادئ توجيهية أكثر صرامة بمتوسط سنوي قدره 5 ميكروغرام/م³ ومتوسط 24 ساعة قدره 15 ميكروغرام/م³ لتوفير الحماية الصحية المثلى."
     }
 };
 
